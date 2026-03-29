@@ -1,0 +1,16 @@
+{
+  "placeholderImages": [
+    {
+      "id": "ecg-waveform",
+      "description": "A placeholder image showing a simulated ECG waveform.",
+      "imageUrl": "https://storage.googleapis.com/stedi-assets/ecg-placeholder.png",
+      "imageHint": "ecg waveform"
+    },
+    {
+      "id": "stethoscope-waveform",
+      "description": "A placeholder image showing a simulated stethoscope audio waveform.",
+      "imageUrl": "https://storage.googleapis.com/stedi-assets/stethoscope-placeholder.png",
+      "imageHint": "audio waveform"
+    }
+  ]
+}

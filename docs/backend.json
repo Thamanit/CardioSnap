@@ -1,0 +1,474 @@
+
+{
+  "entities": {
+    "Patient": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Patient",
+      "type": "object",
+      "description": "Represents a patient in the CardioCap application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Patient entity."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the patient."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the patient."
+        },
+        "dateOfBirth": {
+          "type": "string",
+          "description": "The date of birth of the patient.",
+          "format": "date"
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the patient.",
+          "format": "email"
+        },
+        "phoneNumber": {
+          "type": "string",
+          "description": "The phone number of the patient."
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "dateOfBirth"
+      ]
+    },
+    "HealthcareProfessional": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HealthcareProfessional",
+      "type": "object",
+      "description": "Represents a healthcare professional using the CardioCap application.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the HealthcareProfessional entity."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the healthcare professional."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the healthcare professional."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the healthcare professional.",
+          "format": "email"
+        },
+        "specialty": {
+          "type": "string",
+          "description": "The medical specialty of the healthcare professional."
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "email"
+      ]
+    },
+    "Examination": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Examination",
+      "type": "object",
+      "description": "Represents a medical examination performed on a patient.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Examination entity."
+        },
+        "patientId": {
+          "type": "string",
+          "description": "Reference to Patient. (Relationship: Patient 1:N Examination)"
+        },
+        "healthcareProfessionalId": {
+          "type": "string",
+          "description": "Reference to HealthcareProfessional. (Relationship: HealthcareProfessional 1:N Examination)"
+        },
+        "examinationDate": {
+          "type": "string",
+          "description": "The date and time the examination was performed.",
+          "format": "date-time"
+        },
+        "nailfoldImageId": {
+          "type": "string",
+          "description": "Reference to NailfoldImage. (Relationship: Examination 1:1 NailfoldImage)"
+        },
+        "ecgDataId": {
+          "type": "string",
+          "description": "Reference to ECGData. (Relationship: Examination 1:1 ECGData)"
+        },
+        "oxygenSaturationId": {
+          "type": "string",
+          "description": "Reference to OxygenSaturation. (Relationship: Examination 1:1 OxygenSaturation)"
+        },
+        "riskAssessmentId": {
+          "type": "string",
+          "description": "Reference to RiskAssessment. (Relationship: Examination 1:1 RiskAssessment)"
+        }
+      },
+      "required": [
+        "id",
+        "patientId",
+        "healthcareProfessionalId",
+        "examinationDate"
+      ]
+    },
+    "NailfoldImage": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "NailfoldImage",
+      "type": "object",
+      "description": "Represents a nailfold image uploaded for analysis.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the NailfoldImage entity."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the uploaded nailfold image.",
+          "format": "uri"
+        },
+        "uploadDate": {
+          "type": "string",
+          "description": "The date and time the image was uploaded.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "imageUrl",
+        "uploadDate"
+      ]
+    },
+    "ECGData": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ECGData",
+      "type": "object",
+      "description": "Represents 3-Lead ECG data.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ECGData entity."
+        },
+        "leadI": {
+          "type": "number",
+          "description": "ECG data for Lead I (in mV)."
+        },
+        "leadII": {
+          "type": "number",
+          "description": "ECG data for Lead II (in mV)."
+        },
+        "leadIII": {
+          "type": "number",
+          "description": "ECG data for Lead III (in mV)."
+        }
+      },
+      "required": [
+        "id",
+        "leadI",
+        "leadII",
+        "leadIII"
+      ]
+    },
+    "OxygenSaturation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "OxygenSaturation",
+      "type": "object",
+      "description": "Represents oxygen saturation data (SpO2).",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the OxygenSaturation entity."
+        },
+        "spo2": {
+          "type": "number",
+          "description": "Oxygen saturation level as SpO2 percentage."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The date and time the oxygen saturation was measured.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "spo2",
+        "timestamp"
+      ]
+    },
+    "RiskAssessment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RiskAssessment",
+      "type": "object",
+      "description": "Represents the risk assessment generated by the AI tool.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the RiskAssessment entity."
+        },
+        "assessmentText": {
+          "type": "string",
+          "description": "The text of the risk assessment generated by the AI."
+        },
+        "riskLevel": {
+          "type": "string",
+          "description": "Categorical risk level (e.g., Low, Medium, High)."
+        },
+        "assessmentDate": {
+          "type": "string",
+          "description": "The date and time the risk assessment was generated.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "assessmentText",
+        "riskLevel",
+        "assessmentDate"
+      ]
+    },
+    "PatientAssessment": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PatientAssessment",
+      "type": "object",
+      "description": "Stores a complete patient assessment submission for review by a doctor.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the PatientAssessment document."
+        },
+        "patientName": {
+          "type": "string",
+          "description": "Name of the patient."
+        },
+        "patientId": {
+          "type": "string",
+          "description": "HN or ID of the patient."
+        },
+        "patientAge": {
+          "type": "string"
+        },
+        "patientGender": {
+          "type": "string"
+        },
+        "submissionTimestamp": {
+          "type": "string",
+          "description": "Timestamp of when the assessment was submitted.",
+          "format": "date-time"
+        },
+        "riskLevel": {
+          "type": "number",
+          "description": "AI-calculated risk level (1-4)."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "reviewed"],
+          "description": "Status of the doctor's review."
+        },
+        "aiAnalysis": {
+          "type": "object",
+          "description": "The full JSON output from the AI risk analysis flow."
+        },
+        "doctorComment": {
+          "type": "string",
+          "description": "Comments and recommendations from the doctor."
+        },
+        "doctorFinalRiskLevel": {
+          "type": "number",
+          "description": "The final risk level as confirmed or adjusted by the doctor."
+        },
+        "nailfoldImageUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the nailfold image if one was provided."
+        }
+      },
+      "required": ["id", "patientName", "submissionTimestamp", "riskLevel", "status", "aiAnalysis"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/patients/{patientId}",
+        "definition": {
+          "entityName": "Patient",
+          "schema": {
+            "$ref": "#/backend/entities/Patient"
+          },
+          "description": "Stores patient profile information.  Accessible only by the patient and authorized healthcare professionals.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier for the patient."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/healthcare_professionals/{healthcareProfessionalId}",
+        "definition": {
+          "entityName": "HealthcareProfessional",
+          "schema": {
+            "$ref": "#/backend/entities/HealthcareProfessional"
+          },
+          "description": "Stores healthcare professional profile information. Accessible only by the healthcare professional.",
+          "params": [
+            {
+              "name": "healthcareProfessionalId",
+              "description": "The unique identifier for the healthcare professional."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patient_assessments/{assessmentId}",
+        "definition": {
+            "entityName": "PatientAssessment",
+            "schema": {
+                "$ref": "#/backend/entities/PatientAssessment"
+            },
+            "description": "Stores patient risk assessments submitted for doctor review. Accessible only by authenticated healthcare professionals.",
+            "params": [
+                {
+                    "name": "assessmentId",
+                    "description": "The unique identifier for the patient assessment."
+                }
+            ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/examinations/{examinationId}",
+        "definition": {
+          "entityName": "Examination",
+          "schema": {
+            "$ref": "#/backend/entities/Examination"
+          },
+          "description": "Stores examination data for a specific patient. Includes denormalized 'patientId' for efficient querying and a `members` map which contains the `patientId` and `healthcareProfessionalId` to ensure authorization independence and track the actors involved in this examination. Accessible only by the patient and healthcare professional that are in the members map.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier for the patient."
+            },
+            {
+              "name": "examinationId",
+              "description": "The unique identifier for the examination."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/examinations/{examinationId}/nailfold_images/{nailfoldImageId}",
+        "definition": {
+          "entityName": "NailfoldImage",
+          "schema": {
+            "$ref": "#/backend/entities/NailfoldImage"
+          },
+          "description": "Stores nailfold images associated with an examination.  Inherits authorization from the parent 'examination' document.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier for the patient."
+            },
+            {
+              "name": "examinationId",
+              "description": "The unique identifier for the examination."
+            },
+            {
+              "name": "nailfoldImageId",
+              "description": "The unique identifier for the nailfold image."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/examinations/{examinationId}/ecg_data/{ecgDataId}",
+        "definition": {
+          "entityName": "ECGData",
+          "schema": {
+            "$ref": "#/backend/entities/ECGData"
+          },
+          "description": "Stores ECG data associated with an examination.  Inherits authorization from the parent 'examination' document.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier for the patient."
+            },
+            {
+              "name": "examinationId",
+              "description": "The unique identifier for the examination."
+            },
+            {
+              "name": "ecgDataId",
+              "description": "The unique identifier for the ECG data."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/examinations/{examinationId}/oxygen_saturation/{oxygenSaturationId}",
+        "definition": {
+          "entityName": "OxygenSaturation",
+          "schema": {
+            "$ref": "#/backend/entities/OxygenSaturation"
+          },
+          "description": "Stores oxygen saturation data associated with an examination.  Inherits authorization from the parent 'examination' document.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier for the patient."
+            },
+            {
+              "name": "examinationId",
+              "description": "The unique identifier for the examination."
+            },
+            {
+              "name": "oxygenSaturationId",
+              "description": "The unique identifier for the oxygen saturation data."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/patients/{patientId}/examinations/{examinationId}/risk_assessments/{riskAssessmentId}",
+        "definition": {
+          "entityName": "RiskAssessment",
+          "schema": {
+            "$ref": "#/backend/entities/RiskAssessment"
+          },
+          "description": "Stores risk assessment data associated with an examination. Inherits authorization from the parent 'examination' document.",
+          "params": [
+            {
+              "name": "patientId",
+              "description": "The unique identifier for the patient."
+            },
+            {
+              "name": "examinationId",
+              "description": "The unique identifier for the examination."
+            },
+            {
+              "name": "riskAssessmentId",
+              "description": "The unique identifier for the risk assessment data."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore data structure is designed to support the CardioCap application, focusing on secure data access and efficient querying. The structure leverages path-based ownership for user-specific data and denormalization to ensure authorization independence, eliminating the need for `get()` calls in security rules. This approach enhances security, scalability, and debuggability.\n\nSpecifically, examinations and related data (NailfoldImage, ECGData, OxygenSaturation, and RiskAssessment) are organized under patient documents (`/patients/{patientId}/examinations/{examinationId}`). This hierarchical structure simplifies security rules, ensuring that only the patient (or authorized healthcare professionals - see below) can access their examination data. The `patientId` is also stored within each examination document to allow direct querying of examinations for a specific patient without needing collection group queries (which are generally less performant and scalable).\n\nTo support the requirement of healthcare professionals conducting examinations, the `healthcareProfessionalId` is also stored in the Examination document. In order to maintain authorization independence the members map is included within the examination to control access for the patient and the healthcare provider.\n\nA new top-level collection, `patient_assessments`, has been added to store completed AI analyses for doctor review. This collection is secured so that only authenticated healthcare professionals can read the list of assessments and write comments to them, separating the review workflow from individual patient data trees.\n\nThe structure supports the required QAPs (Queryability, Authorization, Privacy, Scalability) as follows:\n\n*   **Authorization Independence:** Achieved through denormalizing authorization data (e.g., `members` map in Examinations, `patientId` within each Examination document).\n*   **Path-Based Ownership:** Private patient data is stored under `/patients/{patientId}`, enabling straightforward security rules based on the `request.auth.uid`.\n*   **Segregation:** Different data types (patient profiles, examination data, etc.) are stored in separate collections to ensure homogeneous security postures.\n*   **Membership Map:** Implemented for collaborative scenarios, allowing controlled access to shared resources.\n\nThis design adheres to the core principles of Authorization Independence, Clarity of Intent, DBAC (Database-Based Access Control), and QAPs (Rules Are Not Filters). It enables secure and scalable data management for the CardioCap application."
+  }
+}

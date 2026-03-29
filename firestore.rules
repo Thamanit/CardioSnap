@@ -1,0 +1,203 @@
+
+/**
+ * Core Philosophy: This ruleset enforces a strict user-centric security model for a medical application.
+ * Data for Patients and Healthcare Professionals is private and owned by the respective user. Medical examinations
+ * are treated as shared resources, accessible only to the specific patient and the healthcare professional involved in that examination.
+ *
+ * Data Structure: The data is organized hierarchically. There are two top-level collections for user profiles: `/patients` and `/healthcare_professionals`.
+ * All sensitive medical data, including examinations and their sub-components (images, ECG data, etc.), is nested under the corresponding patient's document
+ * at `/patients/{patientId}/examinations/{examinationId}`.
+ *
+ * Key Security Decisions:
+ * - User Listing Disabled: It is not possible to list all patients or all healthcare professionals.
+ * - Strict Ownership: Users can only access and manage their own profile document (e.g., `/patients/{patientId}`).
+ * - Shared Access via Denormalization: Access to an examination and all its sub-collection data is controlled by a `members` map denormalized directly onto the `/examinations/{examinationId}` document. This avoids complex and slow queries in rules, ensuring that only the patient and the responsible healthcare professional can access the data.
+ * - Hierarchical Security: Subcollections (like `/ecg_data`, `/nailfold_images`) inherit their permissions from their parent `examination` document by performing a `get()` call to check the `members` map, ensuring consistent security throughout the data tree.
+ * - Default Deny: Any operation not explicitly granted is denied.
+ *
+ * Denormalization for Authorization:
+ * To secure shared examination data, each `/examinations/{examinationId}` document must contain a `members` map.
+ * Example: `members: { 'patient_user_id': true, 'professional_user_id': true }`.
+ * This allows a fast and secure check (`isExaminationMember()`) without needing to read other collections.
+ *
+ * Structural Segregation:
+ * Patient profiles and healthcare professional profiles are stored in separate top-level collections.
+ * This segregates user types with different data shapes and potential access patterns, simplifying the rules.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --------------------------------------------------------------------
+    // Helper Functions
+    // --------------------------------------------------------------------
+
+    /**
+     * Checks if the user is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * Checks if the authenticated user's UID matches the provided userId.
+     * This is the foundation of the user-ownership model.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * Checks if a document currently exists.
+     * Used in update/delete rules to prevent acting on non-existent data.
+     */
+    function isExistingDoc() {
+      return resource != null;
+    }
+
+    /**
+     * Checks if the current user is the owner of an existing document.
+     * This is a common pattern for update and delete operations.
+     */
+    function isOwnerOfExistingDoc(userId) {
+      return isOwner(userId) && isExistingDoc();
+    }
+    
+    /**
+     * Checks if the requesting user is a registered healthcare professional.
+     */
+    function isHealthcareProfessional() {
+      return isSignedIn() && exists(/databases/$(database)/documents/healthcare_professionals/$(request.auth.uid));
+    }
+
+
+    /**
+     * Checks if the user is a member of a specific examination by reading the
+     * `members` map on the parent examination document.
+     * This requires a `get()` call, which is billed as one read.
+     */
+    function isExaminationMember(patientId, examinationId) {
+      let examinationPath = /databases/$(database)/documents/patients/$(patientId)/examinations/$(examinationId);
+      return isSignedIn() && get(examinationPath).data.members[request.auth.uid] != null;
+    }
+
+    /**
+     * Validates relational integrity for a new patient document on creation.
+     * Ensures the document's internal `id` field matches the document's ID in the path.
+     */
+    function isValidPatientCreate(patientId) {
+      return request.resource.data.id == patientId;
+    }
+    
+    /**
+     * Validates relational integrity for a new professional document on creation.
+     * Ensures the document's internal `id` field matches the document's ID in the path.
+     */
+    function isValidProfessionalCreate(professionalId) {
+      return request.resource.data.id == professionalId;
+    }
+
+    /**
+     * Validates a new Examination document.
+     * Ensures the creator is the listed healthcare professional, the patientId in the path matches
+     * the data, and the members map is correctly initialized.
+     */
+    function isValidNewExamination(patientId) {
+      let data = request.resource.data;
+      let professionalId = data.healthcareProfessionalId;
+      return isSignedIn()
+        && request.auth.uid == professionalId
+        && data.patientId == patientId
+        && data.members.size() == 2
+        && data.members[patientId] != null
+        && data.members[professionalId] != null;
+    }
+
+    /**
+     * Ensures that critical relational fields on an Examination document cannot be changed.
+     */
+    function areExaminationFieldsImmutable() {
+      return request.resource.data.patientId == resource.data.patientId
+        && request.resource.data.healthcareProfessionalId == resource.data.healthcareProfessionalId
+        && request.resource.data.members.diff(resource.data.members).affectedKeys().size() == 0;
+    }
+
+
+    // --------------------------------------------------------------------
+    // Collection Rules
+    // --------------------------------------------------------------------
+
+    /**
+     * @description Controls access to patient profile documents.
+     * @path /patients/{patientId}
+     * @allow A signed-in user (auth.uid='user123') can (create) their own profile at `/patients/user123`.
+     * @deny A user (auth.uid='userABC') cannot (get) or (update) another user's profile at `/patients/user123`.
+     * @principle Restricts access to a user's own data tree and enforces self-creation.
+     */
+    match /patients/{patientId} {
+      allow get: if isOwner(patientId);
+      allow list: if false;
+      allow create: if isOwner(patientId) && isValidPatientCreate(patientId);
+      allow update: if isOwnerOfExistingDoc(patientId);
+      allow delete: if isOwnerOfExistingDoc(patientId);
+
+      /**
+       * @description Controls access to a patient's examination records.
+       * @path /patients/{patientId}/examinations/{examinationId}
+       * @allow The patient ('user123') can (get) their own examination at `/patients/user123/examinations/exam456`.
+       * @deny A random user cannot (list) examinations for patient 'user123'.
+       * @principle Enforces shared access via a denormalized `members` map on the document.
+       */
+      match /examinations/{examinationId} {
+        allow get: if isExaminationMember(patientId, examinationId);
+        allow list: if isOwner(patientId);
+        allow create: if isValidNewExamination(patientId);
+        allow update: if isExaminationMember(patientId, examinationId) && isExistingDoc() && areExaminationFieldsImmutable();
+        allow delete: if isExaminationMember(patientId, examinationId) && isExistingDoc();
+
+        /**
+         * @description Secures all subcollections under an examination (e.g., nailfold_images, ecg_data).
+         * @path /patients/{patientId}/examinations/{examinationId}/{subcollection}/{docId}
+         * @allow A healthcare professional in the parent exam's `members` map can (create) an ECG record.
+         * @deny A user not in the parent exam's `members` map cannot (get) a nailfold image.
+         * @principle Inherits authorization from the parent document using a `get()` call.
+         */
+        match /{subcollection}/{docId} {
+          allow get: if isExaminationMember(patientId, examinationId);
+          allow list: if isExaminationMember(patientId, examinationId);
+          allow create: if isExaminationMember(patientId, examinationId);
+          allow update: if isExaminationMember(patientId, examinationId) && isExistingDoc();
+          allow delete: if isExaminationMember(patientId, examinationId) && isExistingDoc();
+        }
+      }
+    }
+
+    /**
+     * @description Controls access to healthcare professional profile documents.
+     * @path /healthcare_professionals/{healthcareProfessionalId}
+     * @allow A professional (auth.uid='prof123') can (update) their own profile at `/healthcare_professionals/prof123`.
+     * @deny A professional (auth.uid='prof123') cannot (get) another's profile at `/healthcare_professionals/profABC`.
+     * @principle Restricts access to a user's own data tree and enforces self-creation.
+     */
+    match /healthcare_professionals/{healthcareProfessionalId} {
+      allow get: if isOwner(healthcareProfessionalId);
+      allow list: if false;
+      allow create: if isOwner(healthcareProfessionalId) && isValidProfessionalCreate(healthcareProfessionalId);
+      allow update: if isOwnerOfExistingDoc(healthcareProfessionalId);
+      allow delete: if isOwnerOfExistingDoc(healthcareProfessionalId);
+    }
+    
+    /**
+     * @description Controls access to the patient assessment queue for doctors.
+     * @path /patient_assessments/{assessmentId}
+     * @allow All authenticated healthcare professionals can read, list, and update assessments.
+     * @deny Non-authenticated users cannot access this collection. Creation is server-side.
+     */
+    match /patient_assessments/{assessmentId} {
+      allow get, list: if isSignedIn();
+      allow create: if false; // Creation is handled by a trusted server-side process
+      allow update: if isHealthcareProfessional(); // Only doctors can add comments
+      allow delete: if false; // Deletion should be handled carefully, disabled for now
+    }
+  }
+}
