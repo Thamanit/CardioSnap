@@ -39,6 +39,9 @@ next-env.d.ts
 
 .genkit/*
 .env*
+/backend-python/.venv/*
+/backend-python/tf_env/*
+/backend-python/__pycache__/*
 
 # firebase
 firebase-debug.log
