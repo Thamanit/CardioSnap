@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase';
+import { EcgProvider } from '@/context/ecg-context';
 
 export const metadata: Metadata = {
   title: 'CardioCap',
@@ -22,7 +23,9 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <FirebaseClientProvider>
-          {children}
+          <EcgProvider>
+            {children}
+          </EcgProvider>
         </FirebaseClientProvider>
         <Toaster />
       </body>

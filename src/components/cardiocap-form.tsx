@@ -54,6 +54,7 @@ import { Badge } from "./ui/badge";
 import { translations } from "@/lib/translations";
 import { useUser } from "@/firebase";
 import { useLanguage } from "@/context/language-context";
+import { useEcgRecording } from "@/context/ecg-context";
 
 const formSchema = z.object({
   // Section 1: Patient Information
@@ -147,6 +148,7 @@ export default function CardioCapForm() {
   const { lang } = useLanguage();
   const t = translations[lang];
   const { user } = useUser();
+  const { recording, clearRecording } = useEcgRecording();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -223,20 +225,75 @@ export default function CardioCapForm() {
     }
   }, [weight, height, setValue]);
 
+  // Auto-fill ECG data when recording is complete
+  useEffect(() => {
+    if (recording && recording.lead1.length > 0 && recording.lead2.length > 0 && recording.lead3.length > 0) {
+      // Generate realistic ECG values by averaging the recorded data
+      const avgLead1 = recording.lead1.reduce((a, b) => a + b, 0) / recording.lead1.length;
+      const avgLead2 = recording.lead2.reduce((a, b) => a + b, 0) / recording.lead2.length;
+      const avgLead3 = recording.lead3.reduce((a, b) => a + b, 0) / recording.lead3.length;
+
+      // Serialize the full arrays as JSON strings for the backend
+      setValue("ecgLead1", JSON.stringify(recording.lead1));
+      setValue("ecgLead2", JSON.stringify(recording.lead2));
+      setValue("ecgLead3", JSON.stringify(recording.lead3));
+
+      toast({
+        title: "ECG Recording Loaded",
+        description: "ECG data has been automatically filled into the form.",
+      });
+
+      clearRecording();
+    }
+  }, [recording, setValue, toast, clearRecording]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     setResult(null);
 
-    const response = await getRiskAnalysis(values as any);
+    try {
+      // Parse ECG data if they are JSON strings (from recording)
+      let ecgLead1: any = values.ecgLead1;
+      let ecgLead2: any = values.ecgLead2;
+      let ecgLead3: any = values.ecgLead3;
 
-    if (response.success && response.data) {
-      setResult({ analysis: response.data });
-      toast({
-        title: "Analysis Complete",
-        description: "The AI has successfully analyzed the provided data.",
-      });
-    } else {
-      const errorMsg = response.error || t.toast.analysisErrorDefault;
+      try {
+        ecgLead1 = typeof ecgLead1 === 'string' ? JSON.parse(ecgLead1) : ecgLead1;
+        ecgLead2 = typeof ecgLead2 === 'string' ? JSON.parse(ecgLead2) : ecgLead2;
+        ecgLead3 = typeof ecgLead3 === 'string' ? JSON.parse(ecgLead3) : ecgLead3;
+      } catch {
+        // If parsing fails, try to convert to number
+        ecgLead1 = typeof ecgLead1 === 'string' ? parseFloat(ecgLead1) : ecgLead1;
+        ecgLead2 = typeof ecgLead2 === 'string' ? parseFloat(ecgLead2) : ecgLead2;
+        ecgLead3 = typeof ecgLead3 === 'string' ? parseFloat(ecgLead3) : ecgLead3;
+      }
+
+      const submitData = {
+        ...values,
+        ecgLead1,
+        ecgLead2,
+        ecgLead3,
+      };
+
+      const response = await getRiskAnalysis(submitData as any);
+
+      if (response.success && response.data) {
+        setResult({ analysis: response.data });
+        toast({
+          title: "Analysis Complete",
+          description: "The AI has successfully analyzed the provided data.",
+        });
+      } else {
+        const errorMsg = response.error || t.toast.analysisErrorDefault;
+        setResult({ error: errorMsg });
+        toast({
+          variant: "destructive",
+          title: t.toast.analysisErrorTitle,
+          description: errorMsg,
+        });
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : "An unexpected error occurred";
       setResult({ error: errorMsg });
       toast({
         variant: "destructive",
