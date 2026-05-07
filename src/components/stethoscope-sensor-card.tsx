@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { useMurmurRecording } from '@/context/murmur-context';
+import { useToast } from '@/hooks/use-toast';
 
 // Dummy AI Prediction data
 const dummyPrediction = {
@@ -17,19 +19,18 @@ const dummyPrediction = {
 }
 
 export function StethoscopeSensorCard() {
+  const murmurContext = useMurmurRecording();
+  const { toast } = useToast();
 
-  const [isRecording, setIsRecording] = useState(false)
   const [bpm, setBpm] = useState<number | null>(null)
   const [spo2, setSpo2] = useState<number | null>(null)
   const [temp, setTemp] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
   const [showPrediction, setShowPrediction] = useState(false);
+  const [localRecordBuffer, setLocalRecordBuffer] = useState<number[]>([]);
 
   const waveCanvasRef = useRef<HTMLCanvasElement | null>(null)
-
   const audioBuffer = useRef<number[]>(new Array(400).fill(0))
-  const recordBuffer = useRef<number[]>([])
-
   const recordTimer = useRef<NodeJS.Timeout | null>(null)
 
   // ===== Bandpass Filter (simple IIR) =====
@@ -75,7 +76,7 @@ export function StethoscopeSensorCard() {
 
   // ===== Export WAV =====
   const downloadWav = () => {
-    const samples = recordBuffer.current
+    const samples = localRecordBuffer
     if (samples.length === 0) {
       console.log("No audio data to download.");
       return;
@@ -137,8 +138,9 @@ export function StethoscopeSensorCard() {
           audioBuffer.current.push(filteredPcg)
           audioBuffer.current.shift()
 
-          if (isRecording) {
-            recordBuffer.current.push(filteredPcg)
+          if (murmurContext.isRecording) {
+            murmurContext.addMurmurSample(filteredPcg);
+            setLocalRecordBuffer(prev => [...prev, filteredPcg]);
           }
       }
 
@@ -154,19 +156,19 @@ export function StethoscopeSensorCard() {
 
     window.addEventListener("esp-data", handler)
     return () => window.removeEventListener("esp-data", handler)
-  }, [isRecording])
+  }, [murmurContext])
 
   // ===== Progress Timer for Recording =====
   useEffect(() => {
-    if (!isRecording) {
+    if (!murmurContext.isRecording) {
       setProgress(0)
       if (recordTimer.current) clearTimeout(recordTimer.current)
       return
     }
 
-    // Automatically stop and download after 10 seconds
+    // Automatically stop after 10 seconds
     recordTimer.current = setTimeout(() => {
-      toggleRecord(); // This will stop recording and trigger download
+      murmurContext.stopRecording();
     }, 10000);
 
     const progressInterval = setInterval(() => {
@@ -177,7 +179,7 @@ export function StethoscopeSensorCard() {
       clearInterval(progressInterval)
       if (recordTimer.current) clearTimeout(recordTimer.current)
     }
-  }, [isRecording])
+  }, [murmurContext.isRecording])
 
   // ===== Initial Draw =====
   useEffect(() => {
@@ -185,32 +187,53 @@ export function StethoscopeSensorCard() {
   }, [])
 
   // ===== Record Control =====
+  const startRecording = () => {
+    setLocalRecordBuffer([]);
+    setShowPrediction(false);
+    murmurContext.startRecording();
+    toast({
+      title: "Recording Started",
+      description: "Recording murmur for 10 seconds...",
+    });
+  }
+
+  const stopRecording = () => {
+    murmurContext.stopRecording();
+    toast({
+      title: "Recording Stopped",
+      description: "Murmur recording loaded. Ready to submit.",
+    });
+  }
+
   const toggleRecord = () => {
-    if (isRecording) {
-      // Stop recording
-      setIsRecording(false);
+    if (murmurContext.isRecording) {
+      stopRecording();
     } else {
-      // Start recording
-      recordBuffer.current = [];
-      setShowPrediction(false); // Hide old prediction
-      setIsRecording(true);
+      startRecording();
     }
   }
 
   const handleRestart = () => {
-    setIsRecording(false);
+    murmurContext.clearRecording();
+    setLocalRecordBuffer([]);
     setProgress(0);
     setShowPrediction(false);
-    recordBuffer.current = [];
+    toast({
+      title: "Recording Cleared",
+      description: "Ready for new recording.",
+    });
   }
 
   const handleAnalyze = () => {
-    if (recordBuffer.current.length > 0) {
-      // In a real app, you would send recordBuffer.current to an AI service
+    if (localRecordBuffer.length > 0) {
       setShowPrediction(true);
-      downloadWav(); // Also download the file for analysis
+      downloadWav();
     } else {
-      alert("Please record audio first.")
+      toast({
+        title: "No Recording",
+        description: "Please record audio first.",
+        variant: "destructive",
+      });
     }
   }
 
@@ -280,13 +303,13 @@ export function StethoscopeSensorCard() {
           <div className="space-y-2 pt-2">
             <div className="text-center">
               <p className="text-sm font-medium">
-                {isRecording ? `Recording... (${Math.round(progress / 10)}s / 10s)` : "Ready to Record"}
+                {murmurContext.isRecording ? `Recording... (${murmurContext.recordingDuration.toFixed(1)}s / 10s)` : "Ready to Record"}
               </p>
               <Progress value={progress} className="h-2 mt-1" />
             </div>
             <div className="flex items-center gap-2">
-              <Button className="flex-1" onClick={toggleRecord} variant={isRecording ? 'destructive' : 'default'}>
-                {isRecording ? 'Stop' : 'Start Record'}
+              <Button className="flex-1" onClick={toggleRecord} variant={murmurContext.isRecording ? 'destructive' : 'default'}>
+                {murmurContext.isRecording ? 'Stop Recording (10s)' : 'Record (10s)'}
               </Button>
               <Button variant="secondary" size="icon" onClick={handleRestart}><RefreshCw className="w-4 h-4" /></Button>
               <Button variant="secondary" size="icon" onClick={handleAnalyze}><Download className="w-4 h-4" /></Button>

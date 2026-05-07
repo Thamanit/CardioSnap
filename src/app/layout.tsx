@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase';
 import { EcgProvider } from '@/context/ecg-context';
+import { MurmurProvider } from '@/context/murmur-context';
 
 export const metadata: Metadata = {
   title: 'CardioCap',
@@ -24,7 +25,9 @@ export default function RootLayout({
       <body className="font-body antialiased">
         <FirebaseClientProvider>
           <EcgProvider>
-            {children}
+            <MurmurProvider>
+              {children}
+            </MurmurProvider>
           </EcgProvider>
         </FirebaseClientProvider>
         <Toaster />

@@ -55,6 +55,7 @@ import { translations } from "@/lib/translations";
 import { useUser } from "@/firebase";
 import { useLanguage } from "@/context/language-context";
 import { useEcgRecording } from "@/context/ecg-context";
+import { useMurmurRecording } from "@/context/murmur-context";
 
 const formSchema = z.object({
   // Section 1: Patient Information
@@ -109,6 +110,7 @@ const formSchema = z.object({
   ecgLead1: z.string().min(1, "ECG Lead I is required."),
   ecgLead2: z.string().min(1, "ECG Lead II is required."),
   ecgLead3: z.string().min(1, "ECG Lead III is required."),
+  murmurAudioData: z.string().optional(),
 });
 
 type AnalysisResult = {
@@ -149,6 +151,7 @@ export default function CardioCapForm() {
   const t = translations[lang];
   const { user } = useUser();
   const { recording, clearRecording } = useEcgRecording();
+  const { recording: murmurRecording, clearRecording: clearMurmurRecording } = useMurmurRecording();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -185,6 +188,7 @@ export default function CardioCapForm() {
       ecgLead1: "",
       ecgLead2: "",
       ecgLead3: "",
+      murmurAudioData: "",
       isSmoker: false,
       hasDiabetes: false,
       murmurDetection: false,
@@ -247,6 +251,21 @@ export default function CardioCapForm() {
     }
   }, [recording, setValue, toast, clearRecording]);
 
+  // Auto-fill Murmur data when recording is complete
+  useEffect(() => {
+    if (murmurRecording && murmurRecording.audioData.length > 0) {
+      // Serialize the audio data as JSON string for the backend
+      setValue("murmurAudioData", JSON.stringify(murmurRecording.audioData));
+
+      toast({
+        title: "Murmur Recording Loaded",
+        description: "Murmur audio data has been automatically filled into the form.",
+      });
+
+      clearMurmurRecording();
+    }
+  }, [murmurRecording, setValue, toast, clearMurmurRecording]);
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
     setResult(null);
@@ -268,11 +287,20 @@ export default function CardioCapForm() {
         ecgLead3 = typeof ecgLead3 === 'string' ? parseFloat(ecgLead3) : ecgLead3;
       }
 
+      // Parse Murmur audio data
+      let murmurAudioData: any = values.murmurAudioData;
+      try {
+        murmurAudioData = typeof murmurAudioData === 'string' && murmurAudioData ? JSON.parse(murmurAudioData) : murmurAudioData;
+      } catch {
+        murmurAudioData = undefined;
+      }
+
       const submitData = {
         ...values,
         ecgLead1,
         ecgLead2,
         ecgLead3,
+        murmurAudioData: murmurAudioData || undefined,
       };
 
       const response = await getRiskAnalysis(submitData as any);
