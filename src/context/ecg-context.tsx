@@ -50,7 +50,7 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
       if (elapsed >= RECORDING_DURATION) {
         stopRecording();
       }
-    }, 100);
+    }, 10);
   }, []);
 
   const stopRecording = useCallback(() => {
@@ -96,6 +96,7 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
     clearRecording,
     addEcgSample,
   };
+  console.log(value)
 
   return <EcgContext.Provider value={value}>{children}</EcgContext.Provider>;
 }
