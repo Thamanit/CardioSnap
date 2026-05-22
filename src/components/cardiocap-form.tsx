@@ -118,6 +118,19 @@ type AnalysisResult = {
   error?: string;
 };
 
+interface CardioCapFormProps {
+  initialSensorData?: {
+    ppgHeartRate?: string;
+    oxygenSaturation?: string;
+    estimatedBp?: string;
+    bodyTemp?: string;
+    ecgRate?: string;
+    ecgLead1?: string;
+    ecgLead2?: string;
+    ecgLead3?: string;
+  };
+}
+
 const ResultDisplayItem: React.FC<{ label: string; value: React.ReactNode; sub?: boolean }> = ({
   label,
   value,
@@ -146,7 +159,7 @@ const SectionCard: React.FC<{ title: string; icon: React.ReactNode; children: Re
   </Card>
 );
 
-export default function CardioCapForm() {
+export default function CardioCapForm({ initialSensorData }: CardioCapFormProps) {
   const { lang } = useLanguage();
   const t = translations[lang];
   const { user } = useUser();
@@ -228,6 +241,25 @@ export default function CardioCapForm() {
       setValue("bmi", "");
     }
   }, [weight, height, setValue]);
+
+  // Fill form with initial sensor data from URL parameters
+  useEffect(() => {
+    if (initialSensorData) {
+      if (initialSensorData.ppgHeartRate) setValue("ppgHeartRate", initialSensorData.ppgHeartRate);
+      if (initialSensorData.oxygenSaturation) setValue("oxygenSaturation", initialSensorData.oxygenSaturation);
+      if (initialSensorData.estimatedBp) setValue("estimatedBp", initialSensorData.estimatedBp);
+      if (initialSensorData.bodyTemp) setValue("bodyTemp", initialSensorData.bodyTemp);
+      if (initialSensorData.ecgRate) setValue("ecgRate", initialSensorData.ecgRate);
+      if (initialSensorData.ecgLead1) setValue("ecgLead1", initialSensorData.ecgLead1);
+      if (initialSensorData.ecgLead2) setValue("ecgLead2", initialSensorData.ecgLead2);
+      if (initialSensorData.ecgLead3) setValue("ecgLead3", initialSensorData.ecgLead3);
+
+      toast({
+        title: "Sensor Data Loaded",
+        description: "Sensor values have been automatically filled into the form.",
+      });
+    }
+  }, [initialSensorData, setValue, toast]);
 
   // Auto-fill ECG data when recording is complete
   useEffect(() => {

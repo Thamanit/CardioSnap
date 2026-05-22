@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import CardioCapForm from "@/components/cardiocap-form";
 import { useLanguage } from "@/context/language-context";
 
@@ -18,6 +19,20 @@ const translations = {
 export default function DataEntryPage() {
   const { lang } = useLanguage();
   const t = translations[lang];
+  const searchParams = useSearchParams();
+
+  // Extract sensor data from URL query parameters
+  const sensorData = {
+    ppgHeartRate: searchParams.get('ppgHeartRate') || '',
+    oxygenSaturation: searchParams.get('oxygenSaturation') || '',
+    estimatedBp: searchParams.get('estimatedBp') || '',
+    bodyTemp: searchParams.get('bodyTemp') || '',
+    ecgRate: searchParams.get('ecgRate') || '',
+    ecgLead1: searchParams.get('ecgLead1') || '',
+    ecgLead2: searchParams.get('ecgLead2') || '',
+    ecgLead3: searchParams.get('ecgLead3') || '',
+  };
+
   return (
     <div className="w-full flex flex-col items-center">
        <div className="w-full max-w-4xl">
@@ -25,7 +40,7 @@ export default function DataEntryPage() {
          <p className="mt-2 mb-8 max-w-prose text-center text-muted-foreground mx-auto">
             {t.description}
          </p>
-         <CardioCapForm />
+         <CardioCapForm initialSensorData={sensorData} />
        </div>
     </div>
   );
