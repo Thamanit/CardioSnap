@@ -27,13 +27,31 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
   const recordingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = React.useRef<number | null>(null);
   const pendingRef = React.useRef<{ lead1: number[]; lead2: number[]; lead3: number[] }>({
-    lead1: [], lead2: [], lead3: []
+    lead1: [],
+    lead2: [],
+    lead3: [],
   });
   const sampleCountsRef = React.useRef({ lead1: 0, lead2: 0, lead3: 0 });
 
   const RECORDING_DURATION = 10;
   const SAMPLE_RATE = 125;
 
+  // Flush any samples still sitting in the pending buffer
+  const flushPending = useCallback(() => {
+    const pending = pendingRef.current;
+    pendingRef.current = { lead1: [], lead2: [], lead3: [] };
+    setRecording((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        lead1: [...prev.lead1, ...pending.lead1],
+        lead2: [...prev.lead2, ...pending.lead2],
+        lead3: [...prev.lead3, ...pending.lead3],
+      };
+    });
+  }, []);
+
+  // Periodically move pending samples into the official recording
   useEffect(() => {
     if (!isRecording) return;
     const interval = setInterval(() => {
@@ -63,6 +81,7 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
       const elapsed = (Date.now() - (startTimeRef.current || Date.now())) / 1000;
       setRecordingDuration(Math.min(elapsed, RECORDING_DURATION));
       if (elapsed >= RECORDING_DURATION) {
+        flushPending();             // flush remaining samples before stopping
         setIsRecording(false);
         if (recordingIntervalRef.current) {
           clearInterval(recordingIntervalRef.current);
@@ -70,15 +89,16 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }, 10);
-  }, []);
+  }, [flushPending]);
 
   const stopRecording = useCallback(() => {
+    flushPending();               // flush any last samples
     setIsRecording(false);
     if (recordingIntervalRef.current) {
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
     }
-  }, []);
+  }, [flushPending]);
 
   const clearRecording = useCallback(() => {
     setRecording(null);
@@ -92,13 +112,13 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const addEcgSample = useCallback((lead: 'lead1' | 'lead2' | 'lead3', value: number) => {
-    if (!isRecording) return;
-    // const maxSamples = SAMPLE_RATE * RECORDING_DURATION;
-    // if (sampleCountsRef.current[lead] >= maxSamples) return;
-    // sampleCountsRef.current[lead]++;
-    pendingRef.current[lead].push(value);
-  }, [isRecording]);
+  const addEcgSample = useCallback(
+    (lead: 'lead1' | 'lead2' | 'lead3', value: number) => {
+      if (!isRecording) return;
+      pendingRef.current[lead].push(value);
+    },
+    [isRecording]
+  );
 
   const value: EcgContextType = {
     recording,
@@ -110,7 +130,7 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
     addEcgSample,
   };
 
-  console.log(value)
+  console.log(value);
 
   return <EcgContext.Provider value={value}>{children}</EcgContext.Provider>;
 }
