@@ -61,17 +61,17 @@ export function EcgSensorCard() {
 
       // Distribute ECG samples to 3 leads for recording
       // This simulates a 3-lead ECG by assigning samples to each lead sequentially
-      if (isRecording) {
-        const lead = sampleCounterRef.current.lead1 % 3;
-        if (lead === 0) {
+      // if (isRecording) {
+        // const lead = sampleCounterRef.current.lead1 % 3;
+        // if (lead === 0) {
           addEcgSample('lead1', ecg);
-        } else if (lead === 1) {
+        // } else if (lead === 1) {
           addEcgSample('lead2', ecg);
-        } else {
+        // } else {
           addEcgSample('lead3', ecg);
-        }
-        sampleCounterRef.current.lead1++;
-      }
+        // }
+        // sampleCounterRef.current.lead1++;
+      // }
 
     }
 

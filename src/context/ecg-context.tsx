@@ -1,6 +1,5 @@
 'use client';
-
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
 interface EcgRecording {
   lead1: number[];
@@ -12,7 +11,7 @@ interface EcgRecording {
 interface EcgContextType {
   recording: EcgRecording | null;
   isRecording: boolean;
-  recordingDuration: number; // in seconds
+  recordingDuration: number;
   startRecording: () => void;
   stopRecording: () => void;
   clearRecording: () => void;
@@ -27,28 +26,48 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
   const [recordingDuration, setRecordingDuration] = useState(0);
   const recordingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = React.useRef<number | null>(null);
+  const pendingRef = React.useRef<{ lead1: number[]; lead2: number[]; lead3: number[] }>({
+    lead1: [], lead2: [], lead3: []
+  });
+  const sampleCountsRef = React.useRef({ lead1: 0, lead2: 0, lead3: 0 });
 
-  const RECORDING_DURATION = 10; // seconds
-  const SAMPLE_RATE = 125; // Hz
+  const RECORDING_DURATION = 10;
+  const SAMPLE_RATE = 125;
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const interval = setInterval(() => {
+      const pending = pendingRef.current;
+      pendingRef.current = { lead1: [], lead2: [], lead3: [] };
+      setRecording((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          lead1: [...prev.lead1, ...pending.lead1],
+          lead2: [...prev.lead2, ...pending.lead2],
+          lead3: [...prev.lead3, ...pending.lead3],
+        };
+      });
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isRecording]);
 
   const startRecording = useCallback(() => {
-    setRecording({
-      lead1: [],
-      lead2: [],
-      lead3: [],
-      timestamp: new Date(),
-    });
+    sampleCountsRef.current = { lead1: 0, lead2: 0, lead3: 0 };
+    pendingRef.current = { lead1: [], lead2: [], lead3: [] };
+    setRecording({ lead1: [], lead2: [], lead3: [], timestamp: new Date() });
     setIsRecording(true);
     setRecordingDuration(0);
     startTimeRef.current = Date.now();
-
-    // Update duration every 100ms
     recordingIntervalRef.current = setInterval(() => {
       const elapsed = (Date.now() - (startTimeRef.current || Date.now())) / 1000;
       setRecordingDuration(Math.min(elapsed, RECORDING_DURATION));
-
       if (elapsed >= RECORDING_DURATION) {
-        stopRecording();
+        setIsRecording(false);
+        if (recordingIntervalRef.current) {
+          clearInterval(recordingIntervalRef.current);
+          recordingIntervalRef.current = null;
+        }
       }
     }, 10);
   }, []);
@@ -65,6 +84,8 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
     setRecording(null);
     setIsRecording(false);
     setRecordingDuration(0);
+    sampleCountsRef.current = { lead1: 0, lead2: 0, lead3: 0 };
+    pendingRef.current = { lead1: [], lead2: [], lead3: [] };
     if (recordingIntervalRef.current) {
       clearInterval(recordingIntervalRef.current);
       recordingIntervalRef.current = null;
@@ -72,20 +93,12 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addEcgSample = useCallback((lead: 'lead1' | 'lead2' | 'lead3', value: number) => {
-    if (!isRecording || !recording) return;
-
-    // Check if we've reached the recording limit
-    const maxSamples = SAMPLE_RATE * RECORDING_DURATION;
-    if (recording[lead].length >= maxSamples) return;
-
-    setRecording((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        [lead]: [...prev[lead], value],
-      };
-    });
-  }, [isRecording, recording]);
+    if (!isRecording) return;
+    // const maxSamples = SAMPLE_RATE * RECORDING_DURATION;
+    // if (sampleCountsRef.current[lead] >= maxSamples) return;
+    // sampleCountsRef.current[lead]++;
+    pendingRef.current[lead].push(value);
+  }, [isRecording]);
 
   const value: EcgContextType = {
     recording,
@@ -96,6 +109,7 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
     clearRecording,
     addEcgSample,
   };
+
   console.log(value)
 
   return <EcgContext.Provider value={value}>{children}</EcgContext.Provider>;
