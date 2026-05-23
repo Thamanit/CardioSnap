@@ -33,6 +33,16 @@ export function StethoscopeSensorCard() {
   const audioBuffer = useRef<number[]>(new Array(400).fill(0))
   const recordTimer = useRef<NodeJS.Timeout | null>(null)
 
+  const localRecordBufferRef = useRef<number[]>([]);
+  const isRecordingRef = useRef(false);
+  const addMurmurSampleRef = useRef(murmurContext.addMurmurSample);
+
+  // Keep refs up-to-date
+  useEffect(() => {
+    isRecordingRef.current = murmurContext.isRecording;
+    addMurmurSampleRef.current = murmurContext.addMurmurSample;
+  }, [murmurContext.isRecording, murmurContext.addMurmurSample]);
+
   // ===== Bandpass Filter (simple IIR) =====
   const prevInput = useRef(0)
   const prevOutput = useRef(0)
@@ -138,9 +148,9 @@ export function StethoscopeSensorCard() {
           audioBuffer.current.push(filteredPcg)
           audioBuffer.current.shift()
 
-          if (murmurContext.isRecording) {
-            murmurContext.addMurmurSample(filteredPcg);
-            setLocalRecordBuffer(prev => [...prev, filteredPcg]);
+          if (isRecordingRef.current) {
+            addMurmurSampleRef.current(filteredPcg);
+            localRecordBufferRef.current.push(filteredPcg);
           }
       }
 
@@ -156,7 +166,14 @@ export function StethoscopeSensorCard() {
 
     window.addEventListener("esp-data", handler)
     return () => window.removeEventListener("esp-data", handler)
-  }, [murmurContext])
+  }, [])
+
+  // ===== Synchronize localRecordBuffer when recording stops =====
+  useEffect(() => {
+    if (!murmurContext.isRecording && localRecordBufferRef.current.length > 0) {
+      setLocalRecordBuffer([...localRecordBufferRef.current]);
+    }
+  }, [murmurContext.isRecording]);
 
   // ===== Progress Timer for Recording =====
   useEffect(() => {
@@ -188,6 +205,7 @@ export function StethoscopeSensorCard() {
 
   // ===== Record Control =====
   const startRecording = () => {
+    localRecordBufferRef.current = [];
     setLocalRecordBuffer([]);
     setShowPrediction(false);
     murmurContext.startRecording();
@@ -215,6 +233,7 @@ export function StethoscopeSensorCard() {
 
   const handleRestart = () => {
     murmurContext.clearRecording();
+    localRecordBufferRef.current = [];
     setLocalRecordBuffer([]);
     setProgress(0);
     setShowPrediction(false);

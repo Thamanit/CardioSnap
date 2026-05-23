@@ -26,14 +26,35 @@ export function MurmurProvider({ children }: { children: React.ReactNode }) {
   const recordingIntervalRef = React.useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = React.useRef<number | null>(null);
 
+  const audioDataRef = React.useRef<number[]>([]);
+  const isRecordingRef = React.useRef(false);
+
   const RECORDING_DURATION = 10; // seconds
   const SAMPLE_RATE = 4000; // Hz (PCG typical sample rate)
 
-  const startRecording = useCallback(() => {
+  // Keep isRecordingRef in sync
+  React.useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
+  const stopRecording = useCallback(() => {
+    isRecordingRef.current = false;
+    setIsRecording(false);
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    // Save the final accumulated audio data
     setRecording({
-      audioData: [],
+      audioData: [...audioDataRef.current],
       timestamp: new Date(),
     });
+  }, []);
+
+  const startRecording = useCallback(() => {
+    audioDataRef.current = [];
+    setRecording(null);
+    isRecordingRef.current = true;
     setIsRecording(true);
     setRecordingDuration(0);
     startTimeRef.current = Date.now();
@@ -47,18 +68,12 @@ export function MurmurProvider({ children }: { children: React.ReactNode }) {
         stopRecording();
       }
     }, 100);
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    setIsRecording(false);
-    if (recordingIntervalRef.current) {
-      clearInterval(recordingIntervalRef.current);
-      recordingIntervalRef.current = null;
-    }
-  }, []);
+  }, [stopRecording]);
 
   const clearRecording = useCallback(() => {
+    audioDataRef.current = [];
     setRecording(null);
+    isRecordingRef.current = false;
     setIsRecording(false);
     setRecordingDuration(0);
     if (recordingIntervalRef.current) {
@@ -68,20 +83,14 @@ export function MurmurProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addMurmurSample = useCallback((value: number) => {
-    if (!isRecording || !recording) return;
+    if (!isRecordingRef.current) return;
 
     // Check if we've reached the recording limit
     const maxSamples = SAMPLE_RATE * RECORDING_DURATION;
-    if (recording.audioData.length >= maxSamples) return;
+    if (audioDataRef.current.length >= maxSamples) return;
 
-    setRecording((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        audioData: [...prev.audioData, value],
-      };
-    });
-  }, [isRecording, recording]);
+    audioDataRef.current.push(value);
+  }, []);
 
   const value: MurmurContextType = {
     recording,
