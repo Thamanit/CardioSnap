@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Stethoscope, Heart, Waves, VolumeX, RefreshCw, Download, BrainCircuit, Thermometer } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -10,251 +10,176 @@ import { Badge } from '@/components/ui/badge';
 import { useMurmurRecording } from '@/context/murmur-context';
 import { useToast } from '@/hooks/use-toast';
 
-// Dummy AI Prediction data
 const dummyPrediction = {
   murmur: "Present (Holosystolic)",
   confidence: 0.85,
   cycle: { s1: 0.2, s2: 0.5, systole: 0.3, diastole: 0.7 },
-  quality: "Good"
-}
+  quality: "Good",
+};
 
 export function StethoscopeSensorCard() {
   const murmurContext = useMurmurRecording();
   const { toast } = useToast();
 
-  const [bpm, setBpm] = useState<number | null>(null)
-  const [spo2, setSpo2] = useState<number | null>(null)
-  const [temp, setTemp] = useState<number | null>(null)
-  const [progress, setProgress] = useState(0)
+  const [bpm, setBpm] = useState<number | null>(null);
+  const [spo2, setSpo2] = useState<number | null>(null);
+  const [temp, setTemp] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
   const [showPrediction, setShowPrediction] = useState(false);
-  const [localRecordBuffer, setLocalRecordBuffer] = useState<number[]>([]);
+  // A local copy of captured samples used only for WAV export
+  const localSamplesRef = useRef<number[]>([]);
 
-  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null)
-  const audioBuffer = useRef<number[]>(new Array(400).fill(0))
-  const recordTimer = useRef<NodeJS.Timeout | null>(null)
+  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  // Ring buffer for waveform display — never triggers re-renders
+  const audioBuffer = useRef<number[]>(new Array(400).fill(0));
 
-  const localRecordBufferRef = useRef<number[]>([]);
-  const isRecordingRef = useRef(false);
-  const addMurmurSampleRef = useRef(murmurContext.addMurmurSample);
+  // ── Bandpass filter state (refs → no stale closure) ──
+  const prevInput = useRef(0);
+  const prevOutput = useRef(0);
 
-  // Keep refs up-to-date
+  // Keep a stable ref to addMurmurSample so the event handler never goes stale
+  const addSampleRef = useRef(murmurContext.addMurmurSample);
+  const isRecordingRef = useRef(murmurContext.isRecording);
   useEffect(() => {
+    addSampleRef.current = murmurContext.addMurmurSample;
     isRecordingRef.current = murmurContext.isRecording;
-    addMurmurSampleRef.current = murmurContext.addMurmurSample;
-  }, [murmurContext.isRecording, murmurContext.addMurmurSample]);
+  });
 
-  // ===== Bandpass Filter (simple IIR) =====
-  const prevInput = useRef(0)
-  const prevOutput = useRef(0)
-
-  const bandpassFilter = (sample: number) => {
-    const alpha = 0.95; // Smoothing factor for the high-pass filter
-    const beta = 0.05;  // Smoothing factor for the low-pass filter component
-
-    // Simple high-pass filter
-    const highPass = alpha * (prevOutput.current + sample - prevInput.current);
-    // Simple low-pass filter on the high-pass output to create a bandpass effect
-    const lowPass = beta * highPass + (1 - beta) * prevOutput.current;
-
-    prevInput.current = sample;
-    prevOutput.current = lowPass;
-
-    return lowPass;
-  }
-
-  // ===== Draw Waveform =====
-  const drawWaveform = () => {
-    const canvas = waveCanvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.beginPath()
-    audioBuffer.current.forEach((v, i) => {
-      const x = i * canvas.width / audioBuffer.current.length
-      // Simple scaling for visualization
-      let y = canvas.height / 2 - v * 50
-      y = Math.max(0, Math.min(canvas.height, y)) // Clamp to canvas bounds
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
-    })
-    ctx.strokeStyle = "#0d9488" // teal-600
-    ctx.lineWidth = 2
-    ctx.stroke()
-  }
-
-  // ===== Export WAV =====
-  const downloadWav = () => {
-    const samples = localRecordBuffer
-    if (samples.length === 0) {
-      console.log("No audio data to download.");
-      return;
-    }
-    const sampleRate = 4000 // Matching typical PCG sample rates
-    const buffer = new ArrayBuffer(44 + samples.length * 2)
-    const view = new DataView(buffer)
-
-    const writeString = (offset: number, str: string) => {
-      for (let i = 0; i < str.length; i++) {
-        view.setUint8(offset + i, str.charCodeAt(i))
-      }
-    }
-
-    writeString(0, 'RIFF')
-    view.setUint32(4, 36 + samples.length * 2, true)
-    writeString(8, 'WAVE')
-    writeString(12, 'fmt ')
-    view.setUint32(16, 16, true)
-    view.setUint16(20, 1, true) // Mono
-    view.setUint16(22, 1, true) // 1 Channel
-    view.setUint32(24, sampleRate, true)
-    view.setUint32(28, sampleRate * 2, true) // Byte Rate
-    view.setUint16(32, 2, true) // Block Align
-    view.setUint16(34, 16, true) // 16-bit
-    writeString(36, 'data')
-    view.setUint32(40, samples.length * 2, true)
-
-    let offset = 44
-    samples.forEach(s => {
-      const val = Math.max(-1, Math.min(1, s))
-      view.setInt16(offset, val * 32767, true)
-      offset += 2
-    })
-
-    const blob = new Blob([view], { type: 'audio/wav' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "stethoscope_recording.wav"
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
-
-  // ===== Receive ESP Data =====
+  // ── Progress bar driven by recordingDuration from context ──
   useEffect(() => {
-    const handler = (event: Event) => {
-      const customEvent = event as CustomEvent
-      const data = customEvent.detail
-      if (!data) return;
+    setProgress((murmurContext.recordingDuration / 10) * 100);
+  }, [murmurContext.recordingDuration]);
 
-      // Handle PCG data for waveform
-      if(data.pcg !== undefined) {
-          const rawPcg = (data.pcg - 2048) / 120; // Normalize raw data
-          const filteredPcg = bandpassFilter(rawPcg);
-
-          audioBuffer.current.push(filteredPcg)
-          audioBuffer.current.shift()
-
-          if (isRecordingRef.current) {
-            addMurmurSampleRef.current(filteredPcg);
-            localRecordBufferRef.current.push(filteredPcg);
-          }
-      }
-
-      // Update state for real-time values from PPG/other sensors
-      if (data.bpm) setBpm(data.bpm)
-      if (data.spo2) setSpo2(data.spo2 > 100 ? 98 : data.spo2) // Cap SpO2 at 100
-      if (data.temp) setTemp(data.temp)
-
-      requestAnimationFrame(() => {
-        drawWaveform();
-      });
-    }
-
-    window.addEventListener("esp-data", handler)
-    return () => window.removeEventListener("esp-data", handler)
-  }, [])
-
-  // ===== Synchronize localRecordBuffer when recording stops =====
+  // Reset progress when not recording
   useEffect(() => {
-    if (!murmurContext.isRecording && localRecordBufferRef.current.length > 0) {
-      setLocalRecordBuffer([...localRecordBufferRef.current]);
-    }
+    if (!murmurContext.isRecording) setProgress(0);
   }, [murmurContext.isRecording]);
 
-  // ===== Progress Timer for Recording =====
+  // ── Filter ──
+  const bandpassFilter = useCallback((sample: number) => {
+    const alpha = 0.95;
+    const beta = 0.05;
+    const highPass = alpha * (prevOutput.current + sample - prevInput.current);
+    const lowPass = beta * highPass + (1 - beta) * prevOutput.current;
+    prevInput.current = sample;
+    prevOutput.current = lowPass;
+    return lowPass;
+  }, []);
+
+  // ── Draw waveform ──
+  const drawWaveform = useCallback(() => {
+    const canvas = waveCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.beginPath();
+    audioBuffer.current.forEach((v, i) => {
+      const x = (i * canvas.width) / audioBuffer.current.length;
+      const y = Math.max(0, Math.min(canvas.height, canvas.height / 2 - v * 50));
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = '#0d9488';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }, []);
+
+  // ── ESP event handler — registered once, reads only refs ──
   useEffect(() => {
-    if (!murmurContext.isRecording) {
-      setProgress(0)
-      if (recordTimer.current) clearTimeout(recordTimer.current)
-      return
+    const handler = (event: Event) => {
+      const data = (event as CustomEvent).detail;
+      if (!data) return;
+
+      if (data.pcg !== undefined) {
+        const raw = (data.pcg - 2048) / 120;
+        const filtered = bandpassFilter(raw);
+
+        audioBuffer.current.push(filtered);
+        audioBuffer.current.shift();
+
+        // Write into context buffer AND local copy via refs — no closure issues
+        if (isRecordingRef.current) {
+          addSampleRef.current(filtered);
+          localSamplesRef.current.push(filtered);
+        }
+      }
+
+      if (data.bpm)  setBpm(data.bpm);
+      if (data.spo2) setSpo2(data.spo2 > 100 ? 100 : data.spo2);
+      if (data.temp) setTemp(data.temp);
+
+      requestAnimationFrame(drawWaveform);
+    };
+
+    window.addEventListener('esp-data', handler);
+    return () => window.removeEventListener('esp-data', handler);
+  }, [bandpassFilter, drawWaveform]); // stable callbacks → only registers once
+
+  // ── Initial draw ──
+  useEffect(() => { drawWaveform(); }, [drawWaveform]);
+
+  // ── WAV export ──
+  const downloadWav = () => {
+    const samples = localSamplesRef.current;
+    console.log(samples)
+    if (samples.length === 0) {
+      toast({ title: 'No Recording', description: 'Please record audio first.', variant: 'destructive' });
+      return;
     }
+    const sampleRate = 4000;
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+    const ws = (o: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); view.setUint32(4, 36 + samples.length * 2, true);
+    ws(8, 'WAVE'); ws(12, 'fmt ');
+    view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+    ws(36, 'data'); view.setUint32(40, samples.length * 2, true);
+    let offset = 44;
+    samples.forEach(s => { view.setInt16(offset, Math.max(-1, Math.min(1, s)) * 32767, true); offset += 2; });
+    const blob = new Blob([view], { type: 'audio/wav' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'stethoscope_recording.wav';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  };
 
-    // Automatically stop after 10 seconds
-    recordTimer.current = setTimeout(() => {
-      murmurContext.stopRecording();
-    }, 10000);
-
-    const progressInterval = setInterval(() => {
-      setProgress(prev => Math.min(prev + 1, 100));
-    }, 100)
-
-    return () => {
-      clearInterval(progressInterval)
-      if (recordTimer.current) clearTimeout(recordTimer.current)
-    }
-  }, [murmurContext.isRecording])
-
-  // ===== Initial Draw =====
-  useEffect(() => {
-    drawWaveform();
-  }, [])
-
-  // ===== Record Control =====
+  // ── Controls ──
   const startRecording = () => {
-    localRecordBufferRef.current = [];
-    setLocalRecordBuffer([]);
+    localSamplesRef.current = [];
     setShowPrediction(false);
     murmurContext.startRecording();
-    toast({
-      title: "Recording Started",
-      description: "Recording murmur for 10 seconds...",
-    });
-  }
+    toast({ title: 'Recording Started', description: 'Recording for 10 seconds…' });
+  };
 
   const stopRecording = () => {
     murmurContext.stopRecording();
-    toast({
-      title: "Recording Stopped",
-      description: "Murmur recording loaded. Ready to submit.",
-    });
-  }
+    toast({ title: 'Recording Stopped', description: 'Murmur recording loaded. Ready to submit.' });
+  };
 
   const toggleRecord = () => {
-    if (murmurContext.isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
-    }
-  }
+    if (murmurContext.isRecording) stopRecording();
+    else startRecording();
+  };
 
   const handleRestart = () => {
     murmurContext.clearRecording();
-    localRecordBufferRef.current = [];
-    setLocalRecordBuffer([]);
-    setProgress(0);
+    localSamplesRef.current = [];
     setShowPrediction(false);
-    toast({
-      title: "Recording Cleared",
-      description: "Ready for new recording.",
-    });
-  }
+    toast({ title: 'Recording Cleared', description: 'Ready for new recording.' });
+  };
 
   const handleAnalyze = () => {
-    if (localRecordBuffer.length > 0) {
+    if (localSamplesRef.current.length > 0) {
       setShowPrediction(true);
       downloadWav();
     } else {
-      toast({
-        title: "No Recording",
-        description: "Please record audio first.",
-        variant: "destructive",
-      });
+      toast({ title: 'No Recording', description: 'Please record audio first.', variant: 'destructive' });
     }
-  }
+  };
 
   return (
     <Card>
@@ -266,7 +191,7 @@ export function StethoscopeSensorCard() {
       </CardHeader>
 
       <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left Column: Waveform */}
+        {/* Left: Waveform */}
         <div className="space-y-2">
           <h3 className="font-semibold text-center text-muted-foreground">Real-time PCG Waveform</h3>
           <canvas
@@ -277,7 +202,7 @@ export function StethoscopeSensorCard() {
           />
         </div>
 
-        {/* Right Column: Controls & Prediction */}
+        {/* Right: Controls */}
         <div className="space-y-4 flex flex-col justify-between">
           <div className="flex justify-around items-center gap-4 text-sm text-muted-foreground p-2 rounded-lg bg-slate-50">
             <div className="flex items-center gap-2">
@@ -301,7 +226,6 @@ export function StethoscopeSensorCard() {
             </div>
           </Alert>
 
-          {/* AI Prediction Panel */}
           {showPrediction && (
             <Card className="bg-blue-50 border-blue-200">
               <CardHeader className="pb-2">
@@ -311,10 +235,17 @@ export function StethoscopeSensorCard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="text-sm space-y-2">
-                <div className="flex justify-between"><strong>Murmur:</strong> <Badge variant={dummyPrediction.murmur.includes("Present") ? "destructive" : "secondary"}>{dummyPrediction.murmur}</Badge></div>
+                <div className="flex justify-between">
+                  <strong>Murmur:</strong>
+                  <Badge variant={dummyPrediction.murmur.includes('Present') ? 'destructive' : 'secondary'}>
+                    {dummyPrediction.murmur}
+                  </Badge>
+                </div>
                 <div className="flex justify-between"><strong>Confidence:</strong> <span>{(dummyPrediction.confidence * 100).toFixed(1)}%</span></div>
                 <div className="flex justify-between"><strong>Audio Quality:</strong> <span>{dummyPrediction.quality}</span></div>
-                <div className="text-xs text-muted-foreground pt-2">Heart Cycle (s1-s2 timing): S1: {dummyPrediction.cycle.s1}s, S2: {dummyPrediction.cycle.s2}s</div>
+                <div className="text-xs text-muted-foreground pt-2">
+                  Heart Cycle: S1 {dummyPrediction.cycle.s1}s · S2 {dummyPrediction.cycle.s2}s
+                </div>
               </CardContent>
             </Card>
           )}
@@ -322,13 +253,19 @@ export function StethoscopeSensorCard() {
           <div className="space-y-2 pt-2">
             <div className="text-center">
               <p className="text-sm font-medium">
-                {murmurContext.isRecording ? `Recording... (${murmurContext.recordingDuration.toFixed(1)}s / 10s)` : "Ready to Record"}
+                {murmurContext.isRecording
+                  ? `Recording… ${murmurContext.recordingDuration.toFixed(1)}s / 10s`
+                  : 'Ready to Record'}
               </p>
               <Progress value={progress} className="h-2 mt-1" />
             </div>
             <div className="flex items-center gap-2">
-              <Button className="flex-1" onClick={toggleRecord} variant={murmurContext.isRecording ? 'destructive' : 'default'}>
-                {murmurContext.isRecording ? 'Stop Recording (10s)' : 'Record (10s)'}
+              <Button
+                className="flex-1"
+                onClick={toggleRecord}
+                variant={murmurContext.isRecording ? 'destructive' : 'default'}
+              >
+                {murmurContext.isRecording ? 'Stop Recording' : 'Record (10s)'}
               </Button>
               <Button variant="secondary" size="icon" onClick={handleRestart}><RefreshCw className="w-4 h-4" /></Button>
               <Button variant="secondary" size="icon" onClick={handleAnalyze}><Download className="w-4 h-4" /></Button>
@@ -337,5 +274,5 @@ export function StethoscopeSensorCard() {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }

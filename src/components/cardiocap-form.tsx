@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { classifyBP, type BPResult } from "@/firebase/actions";
 import {
   Loader2,
   WandSparkles,
@@ -122,10 +123,9 @@ const formSchema = z.object({
   arterialStiffness: z.string().optional(),
   ppgAbnormalPulse: z.array(z.string()).optional(),
 
-  // Original required fields
-  ecgLead1: z.string().min(1, "ECG Lead I is required."),
+  ecgLead1: z.string().optional(),
   ecgLead2: z.string().min(1, "ECG Lead II is required."),
-  ecgLead3: z.string().min(1, "ECG Lead III is required."),
+  ecgLead3: z.string().optional(),
   murmurAudioData: z.string().optional(),
 });
 
@@ -167,16 +167,18 @@ export default function CardioCapForm() {
   const t = translations[lang];
   const { user } = useUser();
 
-  // Now also destructure isRecording to know when recording has really finished
   const { recording, isRecording, clearRecording } = useEcgRecording();
   const {
     recording: murmurRecording,
     isRecording: isMurmurRecording,
     clearRecording: clearMurmurRecording,
+    ppgWavBlob,
   } = useMurmurRecording();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [bpResult, setBpResult] = useState<BPResult | null>(null);
+  const [isBpLoading, setIsBpLoading] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -238,6 +240,51 @@ export default function CardioCapForm() {
     }
   }, [examinerType, user, setValue]);
 
+  // BP estimation from ECG + PPG
+  useEffect(() => {
+    const lead2Raw = form.getValues("ecgLead2");
+    if (!lead2Raw || !ppgWavBlob) return;
+
+    let lead2: number[];
+    try {
+      lead2 = JSON.parse(lead2Raw);
+      if (!Array.isArray(lead2) || lead2.length === 0) return;
+    } catch {
+      return;
+    }
+
+    let cancelled = false;
+    setIsBpLoading(true);
+    setBpResult(null);
+
+    classifyBP(lead2, ppgWavBlob).then((res) => {
+      if (cancelled) return;
+      setIsBpLoading(false);
+      if (res.success && res.data) {
+        setBpResult(res.data);
+        form.setValue(
+          "estimatedBp",
+          `${res.data.sbp_mmhg} / ${res.data.dbp_mmhg} mmHg (${res.data.interpretation})`
+        );
+        toast({
+          title: "Blood Pressure Estimated",
+          description: `SBP ${res.data.sbp_mmhg} / DBP ${res.data.dbp_mmhg} mmHg — ${res.data.interpretation}`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "BP Estimation Failed",
+          description: res.error ?? "Could not estimate blood pressure.",
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ppgWavBlob, form.watch("ecgLead2")]);
+
   // Calculate BMI
   useEffect(() => {
     const weightNum = parseFloat(weight || "0");
@@ -251,29 +298,19 @@ export default function CardioCapForm() {
     }
   }, [weight, height, setValue]);
 
-  // Auto-fill ECG data ONLY after recording has completely stopped
+  // Auto-fill ECG data after recording stops
   useEffect(() => {
-    if (
-      !isRecording &&
-      recording &&
-      recording.lead1.length > 0 &&
-      recording.lead2.length > 0 &&
-      recording.lead3.length > 0
-    ) {
-      setValue("ecgLead1", JSON.stringify(recording.lead1));
+    if (!isRecording && recording && recording.lead2.length > 0) {
       setValue("ecgLead2", JSON.stringify(recording.lead2));
-      setValue("ecgLead3", JSON.stringify(recording.lead3));
-
       toast({
         title: "ECG Recording Loaded",
         description: "ECG data has been automatically filled into the form.",
       });
-
       clearRecording();
     }
   }, [recording, isRecording, setValue, toast, clearRecording]);
 
-  // Auto-fill Murmur data ONLY after recording has completely stopped
+  // Auto-fill Murmur data after recording stops
   useEffect(() => {
     if (
       !isMurmurRecording &&
@@ -281,12 +318,11 @@ export default function CardioCapForm() {
       murmurRecording.audioData.length > 0
     ) {
       setValue("murmurAudioData", JSON.stringify(murmurRecording.audioData));
-
       toast({
         title: "Murmur Recording Loaded",
-        description: "Murmur audio data has been automatically filled into the form.",
+        description:
+          "Murmur audio data has been automatically filled into the form.",
       });
-
       clearMurmurRecording();
     }
   }, [murmurRecording, isMurmurRecording, setValue, toast, clearMurmurRecording]);
@@ -296,7 +332,6 @@ export default function CardioCapForm() {
     setResult(null);
 
     try {
-      // Parse ECG data if they are JSON strings (from recording)
       let ecgLead1: any = values.ecgLead1;
       let ecgLead2: any = values.ecgLead2;
       let ecgLead3: any = values.ecgLead3;
@@ -317,7 +352,6 @@ export default function CardioCapForm() {
           typeof ecgLead3 === "string" ? parseFloat(ecgLead3) : ecgLead3;
       }
 
-      // Parse Murmur audio data
       let murmurAudioData: any = values.murmurAudioData;
       try {
         murmurAudioData =
@@ -1143,9 +1177,7 @@ export default function CardioCapForm() {
                       name="murmurPosition"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>
-                            {t.stethoscope.murmurPosition}
-                          </FormLabel>
+                          <FormLabel>{t.stethoscope.murmurPosition}</FormLabel>
                           <Select
                             onValueChange={field.onChange}
                             defaultValue={field.value}
@@ -1167,10 +1199,7 @@ export default function CardioCapForm() {
                                 {t.stethoscope.murmurPositionOptions.pulmonic}
                               </SelectItem>
                               <SelectItem value="tricuspid">
-                                {
-                                  t.stethoscope.murmurPositionOptions
-                                    .tricuspid
-                                }
+                                {t.stethoscope.murmurPositionOptions.tricuspid}
                               </SelectItem>
                               <SelectItem value="mitral">
                                 {t.stethoscope.murmurPositionOptions.mitral}
@@ -1222,9 +1251,7 @@ export default function CardioCapForm() {
                   name="rhythmCharacteristics"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>
-                        {t.stethoscope.rhythmCharacteristics}
-                      </FormLabel>
+                      <FormLabel>{t.stethoscope.rhythmCharacteristics}</FormLabel>
                       <FormControl>
                         <RadioGroup
                           onValueChange={field.onChange}
@@ -1236,10 +1263,7 @@ export default function CardioCapForm() {
                               <RadioGroupItem value="regular" />
                             </FormControl>
                             <FormLabel className="font-normal">
-                              {
-                                t.stethoscope.rhythmCharacteristicsOptions
-                                  .regular
-                              }
+                              {t.stethoscope.rhythmCharacteristicsOptions.regular}
                             </FormLabel>
                           </FormItem>
                           <FormItem className="flex items-center space-x-2 space-y-0">
@@ -1247,10 +1271,7 @@ export default function CardioCapForm() {
                               <RadioGroupItem value="irregular" />
                             </FormControl>
                             <FormLabel className="font-normal">
-                              {
-                                t.stethoscope.rhythmCharacteristicsOptions
-                                  .irregular
-                              }
+                              {t.stethoscope.rhythmCharacteristicsOptions.irregular}
                             </FormLabel>
                           </FormItem>
                           <FormItem className="flex items-center space-x-2 space-y-0">
@@ -1258,10 +1279,7 @@ export default function CardioCapForm() {
                               <RadioGroupItem value="variable_intensity" />
                             </FormControl>
                             <FormLabel className="font-normal">
-                              {
-                                t.stethoscope.rhythmCharacteristicsOptions
-                                  .variable_intensity
-                              }
+                              {t.stethoscope.rhythmCharacteristicsOptions.variable_intensity}
                             </FormLabel>
                           </FormItem>
                         </RadioGroup>
@@ -1317,13 +1335,41 @@ export default function CardioCapForm() {
                     name="estimatedBp"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t.ppg.bp}</FormLabel>
+                        <FormLabel className="flex items-center gap-2">
+                          {t.ppg.bp}
+                          {isBpLoading && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Estimating…
+                            </span>
+                          )}
+                          {bpResult && !isBpLoading && (
+                            <span className="text-xs text-green-600 font-medium">
+                              ✓ AI-derived
+                            </span>
+                          )}
+                        </FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="e.g., 120 / 80 mmHg"
+                            placeholder="Auto-filled after ECG + PPG recording"
                             {...field}
+                            readOnly={!!bpResult}
+                            className={bpResult ? "bg-muted/50" : ""}
                           />
                         </FormControl>
+                        {bpResult && (
+                          <div className="mt-1 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800 space-y-0.5">
+                            <p className="font-semibold">
+                              SBP {bpResult.sbp_mmhg} / DBP {bpResult.dbp_mmhg} mmHg
+                            </p>
+                            <p>{bpResult.interpretation}</p>
+                            <p className="text-green-600">
+                              Based on {bpResult.num_windows_analyzed} analysis window
+                              {bpResult.num_windows_analyzed !== 1 ? "s" : ""}
+                            </p>
+                          </div>
+                        )}
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
@@ -1710,7 +1756,10 @@ export default function CardioCapForm() {
                 <HeartHandshake className="mr-2 h-4 w-4" />
                 {t.results.recommendationsButton}
               </Button>
-              <Button onClick={() => window.print()} className="w-full sm:w-auto">
+              <Button
+                onClick={() => window.print()}
+                className="w-full sm:w-auto"
+              >
                 <Printer className="mr-2 h-4 w-4" />
                 {t.results.pdfButton}
               </Button>

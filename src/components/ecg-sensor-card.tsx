@@ -64,11 +64,11 @@ export function EcgSensorCard() {
       // if (isRecording) {
         // const lead = sampleCounterRef.current.lead1 % 3;
         // if (lead === 0) {
-          addEcgSample('lead1', ecg);
+          // addEcgSample('lead1', ecg);
         // } else if (lead === 1) {
           addEcgSample('lead2', ecg);
         // } else {
-          addEcgSample('lead3', ecg);
+          // addEcgSample('lead3', ecg);
         // }
         // sampleCounterRef.current.lead1++;
       // }
