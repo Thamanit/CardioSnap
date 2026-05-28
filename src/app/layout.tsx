@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { FirebaseClientProvider } from '@/firebase';
 import { EcgProvider } from '@/context/ecg-context';
 import { MurmurProvider } from '@/context/murmur-context';
+import { PPGProvider } from '@/context/ppg-context';
 
 export const metadata: Metadata = {
   title: 'CardioCap',
@@ -26,7 +27,9 @@ export default function RootLayout({
         <FirebaseClientProvider>
           <EcgProvider>
             <MurmurProvider>
-              {children}
+              <PPGProvider>
+                {children}
+              </PPGProvider>
             </MurmurProvider>
           </EcgProvider>
         </FirebaseClientProvider>

@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useMurmurRecording } from '@/context/murmur-context';
+import { usePPGCapture } from '@/context/ppg-context';
 import { useToast } from '@/hooks/use-toast';
 
 const dummyPrediction = {
@@ -19,6 +20,7 @@ const dummyPrediction = {
 
 export function StethoscopeSensorCard() {
   const murmurContext = useMurmurRecording();
+  const ppgContext = usePPGCapture();
   const { toast } = useToast();
 
   const [bpm, setBpm] = useState<number | null>(null);
@@ -40,10 +42,19 @@ export function StethoscopeSensorCard() {
   // Keep a stable ref to addMurmurSample so the event handler never goes stale
   const addSampleRef = useRef(murmurContext.addMurmurSample);
   const isRecordingRef = useRef(murmurContext.isRecording);
+  const addPPGSampleRef = useRef(ppgContext.addPPGSample);
+  
   useEffect(() => {
     addSampleRef.current = murmurContext.addMurmurSample;
+  }, [murmurContext.addMurmurSample]);
+  
+  useEffect(() => {
     isRecordingRef.current = murmurContext.isRecording;
-  });
+  }, [murmurContext.isRecording]);
+
+  useEffect(() => {
+    addPPGSampleRef.current = ppgContext.addPPGSample;
+  }, [ppgContext.addPPGSample]);
 
   // ── Progress bar driven by recordingDuration from context ──
   useEffect(() => {
@@ -87,6 +98,11 @@ export function StethoscopeSensorCard() {
 
   // ── ESP event handler — registered once, reads only refs ──
   useEffect(() => {
+    let sampleCount = 0;
+    let lastLogTime = Date.now();
+    
+    console.log('[ESP Listener] Attached to esp-data events');
+    
     const handler = (event: Event) => {
       const data = (event as CustomEvent).detail;
       if (!data) return;
@@ -102,18 +118,35 @@ export function StethoscopeSensorCard() {
         if (isRecordingRef.current) {
           addSampleRef.current(filtered);
           localSamplesRef.current.push(filtered);
+          sampleCount++;
+          
+          // Log every second
+          const now = Date.now();
+          if (now - lastLogTime >= 1000) {
+            console.log(`[ESP] Last 1s: ${sampleCount} samples received`);
+            sampleCount = 0;
+            lastLogTime = now;
+          }
         }
       }
 
       if (data.bpm)  setBpm(data.bpm);
-      if (data.spo2) setSpo2(data.spo2 > 100 ? 100 : data.spo2);
+      if (data.spo2) {
+        setSpo2(data.spo2 > 100 ? 100 : data.spo2);
+        // Normalize spo2 (0-100) to PPG sample (-1 to 1 range)
+        const ppgSample = (data.spo2 / 50) - 1; // Maps 0-100 to -1 to 1
+        addPPGSampleRef.current(ppgSample);
+      }
       if (data.temp) setTemp(data.temp);
 
       requestAnimationFrame(drawWaveform);
     };
 
     window.addEventListener('esp-data', handler);
-    return () => window.removeEventListener('esp-data', handler);
+    return () => {
+      window.removeEventListener('esp-data', handler);
+      console.log('[ESP Listener] Detached from esp-data events');
+    };
   }, [bandpassFilter, drawWaveform]); // stable callbacks → only registers once
 
   // ── Initial draw ──
@@ -122,11 +155,21 @@ export function StethoscopeSensorCard() {
   // ── WAV export ──
   const downloadWav = () => {
     const samples = localSamplesRef.current;
-    console.log(samples)
+    
+    console.log('===== [DOWNLOAD WAV] =====');
+    console.log('Sample count:', samples.length);
+    console.log('Expected: 40,000 (4000 Hz × 10 sec)');
+    console.log('Actual duration:', (samples.length / 4000).toFixed(2), 'seconds');
+    console.log('First 5 samples:', samples.slice(0, 5));
+    console.log('Last 5 samples:', samples.slice(-5));
+    console.log('Full data:', samples);
+    
     if (samples.length === 0) {
+      console.error('❌ NO SAMPLES - Recording failed!');
       toast({ title: 'No Recording', description: 'Please record audio first.', variant: 'destructive' });
       return;
     }
+    
     const sampleRate = 4000;
     const buffer = new ArrayBuffer(44 + samples.length * 2);
     const view = new DataView(buffer);
@@ -140,6 +183,9 @@ export function StethoscopeSensorCard() {
     let offset = 44;
     samples.forEach(s => { view.setInt16(offset, Math.max(-1, Math.min(1, s)) * 32767, true); offset += 2; });
     const blob = new Blob([view], { type: 'audio/wav' });
+    
+    console.log('✅ WAV created:', blob.size, 'bytes');
+    
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = 'stethoscope_recording.wav';
@@ -151,13 +197,19 @@ export function StethoscopeSensorCard() {
   const startRecording = () => {
     localSamplesRef.current = [];
     setShowPrediction(false);
+    console.log('[Stethoscope] startRecording() called - clearing local buffer');
     murmurContext.startRecording();
+    ppgContext.startPPGCapture();
+    console.log('[Stethoscope] murmurContext.startRecording() and ppgContext.startPPGCapture() called');
     toast({ title: 'Recording Started', description: 'Recording for 10 seconds…' });
   };
 
   const stopRecording = () => {
+    console.log('[Stethoscope] stopRecording() called');
+    console.log('[Stethoscope] Samples in local buffer:', localSamplesRef.current.length);
     murmurContext.stopRecording();
-    toast({ title: 'Recording Stopped', description: 'Murmur recording loaded. Ready to submit.' });
+    ppgContext.stopPPGCapture();
+    toast({ title: 'Recording Stopped', description: 'Murmur and PPG recordings loaded. Ready to submit.' });
   };
 
   const toggleRecord = () => {
@@ -167,6 +219,7 @@ export function StethoscopeSensorCard() {
 
   const handleRestart = () => {
     murmurContext.clearRecording();
+    ppgContext.clearPPGCapture();
     localSamplesRef.current = [];
     setShowPrediction(false);
     toast({ title: 'Recording Cleared', description: 'Ready for new recording.' });

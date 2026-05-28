@@ -57,6 +57,7 @@ import { useUser } from "@/firebase";
 import { useLanguage } from "@/context/language-context";
 import { useEcgRecording } from "@/context/ecg-context";
 import { useMurmurRecording } from "@/context/murmur-context";
+import { usePPGCapture } from "@/context/ppg-context";
 
 const formSchema = z.object({
   // Section 1: Patient Information
@@ -172,8 +173,8 @@ export default function CardioCapForm() {
     recording: murmurRecording,
     isRecording: isMurmurRecording,
     clearRecording: clearMurmurRecording,
-    ppgWavBlob,
   } = useMurmurRecording();
+  const { ppgWavBlob } = usePPGCapture();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);

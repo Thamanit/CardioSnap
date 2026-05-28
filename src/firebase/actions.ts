@@ -9,7 +9,7 @@ import { z } from "zod";
 import { initializeFirebase } from "@/firebase/server-init";
 
 // ─────────────────────────────────────────────
-// CONFIG — swap URL here only
+// CONFIG
 // ─────────────────────────────────────────────
 
 const FLASK_BASE =
@@ -108,7 +108,7 @@ export async function getRiskAnalysis(
 // Body: { lead1: number[], lead2: number[], lead3: number[] }
 // ─────────────────────────────────────────────
 
-async function classifyEcg(ecgData: {
+export async function classifyEcg(ecgData: {
   lead1: number[];
   lead2: number[];
   lead3: number[];
@@ -119,10 +119,16 @@ async function classifyEcg(ecgData: {
   leads_used?: string[];
 }> {
   try {
+    const onlyLead2 = {
+      lead2: ecgData.lead2
+    }
+    
+    console.log(JSON.stringify(onlyLead2))
+
     const response = await fetch(`${FLASK_BASE}/ecg-model`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(ecgData),
+      body: JSON.stringify(onlyLead2),
     });
 
     if (!response.ok) {
@@ -176,7 +182,7 @@ export async function classifyMurmur(
     const response = await fetch(`${FLASK_BASE}/murmur-model`, {
       method: "POST",
       body: formData,
-      // Do NOT set Content-Type header — browser sets multipart boundary automatically
+      // Do NOT set Content-Type — browser sets multipart boundary automatically
     });
 
     if (!response.ok) {
@@ -197,47 +203,54 @@ export async function classifyMurmur(
 
 // ─────────────────────────────────────────────
 // BLOOD PRESSURE (ECG + PPG)
-// POST /bp-model   (multipart/form-data)
-// Fields:
-//   ecg = JSON string  { "lead2": number[] }   ← 1250 floats at 125 Hz
-//   ppg = <ppg_recording.wav>                  ← ~10 s PPG/stethoscope wav
+// POST /bp-model
+//
+// Body (JSON):
+//   {
+//     "ecg":         number[],   ← raw ADC values from ECG_PIN  (125 Hz)
+//     "ppg":         number[],   ← raw IR values from MAX30102  (125 Hz)
+//     "sample_rate": 125         ← optional, default 125
+//   }
+//
+// How to build the arrays on the client:
+//   Buffer BLE packets for 10–15 seconds, then:
+//     ecg[] = packets.map(p => p.ecg)
+//     ppg[] = packets.map(p => p.ir)
 // ─────────────────────────────────────────────
 
 export type BPResult = {
-  sbp_mmhg: number;
-  dbp_mmhg: number;
-  interpretation: string;
-  num_windows_analyzed: number;
-  num_windows_in_range: number;
-  ecg_samples: number;
-  ppg_samples: number;
-  sample_rate: number;
-  per_window: Array<{
-    window_index: number;
-    sbp_mmhg: number;
-    dbp_mmhg: number;
-    in_range: boolean;
+  sbp: number;                // Systolic BP  — median across beats (mmHg)
+  dbp: number;                // Diastolic BP — median across beats (mmHg)
+  sbp_mean: number;           // Systolic BP  — mean  across beats (mmHg)
+  dbp_mean: number;           // Diastolic BP — mean  across beats (mmHg)
+  bpm: number | null;         // Heart rate estimated from PPG
+  spo2: null;                 // Always null for /bp-model (no RED channel)
+  num_beats: number;          // Number of beats detected
+  model: string;              // "BPNet1D"
+  per_beat: Array<{
+    beat_index: number;
+    sbp: number;
+    dbp: number;
   }>;
 };
 
 export async function classifyBP(
-  lead2: number[],
-  ppgWavFile: File
+  ecg: number[],   // raw ECG ADC samples at 125 Hz  (from packet.ecg)
+  ppg: number[],   // raw IR samples at 125 Hz        (from packet.ir)
+  sampleRate: number = 125
 ): Promise<{ success: boolean; data?: BPResult; error?: string }> {
   try {
-    if (!ppgWavFile.name.toLowerCase().endsWith(".wav")) {
-      return { success: false, error: "Only .wav files are supported for PPG input." };
+    if (ecg.length < 250 || ppg.length < 250) {
+      return {
+        success: false,
+        error: "Signal too short — buffer at least 2 seconds of BLE packets.",
+      };
     }
-
-    const formData = new FormData();
-    // ECG as JSON string in form field "ecg"
-    formData.append("ecg", JSON.stringify({ lead2 }));
-    // PPG wav file in form field "ppg"
-    formData.append("ppg", ppgWavFile);
 
     const response = await fetch(`${FLASK_BASE}/bp-model`, {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ecg, ppg, sample_rate: sampleRate }),
     });
 
     if (!response.ok) {
