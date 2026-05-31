@@ -7,7 +7,7 @@ import { MurmurProvider } from '@/context/murmur-context';
 import { PPGProvider } from '@/context/ppg-context';
 
 export const metadata: Metadata = {
-  title: 'CardioCap',
+  title: 'CardioSnap',
   description: 'An AI-powered cardiovascular risk assessment tool.',
 };
 

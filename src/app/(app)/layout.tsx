@@ -76,7 +76,7 @@ function AppLayoutContent({
           <div className="flex items-center gap-4">
             <Link href="/data-entry" className="flex items-center gap-2">
               <Icons.logo className="h-8 w-8 text-primary" />
-              <h1 className="text-xl font-bold text-primary hidden sm:inline-block">CardioCap</h1>
+              <h1 className="text-xl font-bold text-primary hidden sm:inline-block">CardioSnap</h1>
             </Link>
           </div>
           

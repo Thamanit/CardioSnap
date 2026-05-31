@@ -7,11 +7,11 @@ import { useLanguage } from "@/context/language-context";
 
 const translations = {
   th: {
-    title: "CardioCap",
+    title: "CardioSnap",
     description: "กรอกข้อมูลหัวใจและหลอดเลือดของคุณด้านล่าง AI ของเราจะทำการประเมินความเสี่ยงเบื้องต้น นี่ไม่ใช่สิ่งทดแทนคำแนะนำทางการแพทย์จากผู้เชี่ยวชาญ",
   },
   en: {
-    title: "CardioCap",
+    title: "CardioSnap",
     description: "Enter your cardiovascular data below. Our AI will provide a preliminary risk assessment. This is not a substitute for professional medical advice.",
   }
 }
