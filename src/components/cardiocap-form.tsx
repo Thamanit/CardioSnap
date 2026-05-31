@@ -169,7 +169,7 @@ export default function CardioCapForm() {
   const t = translations[lang];
   const { user } = useUser();
 
-  const { recording, isRecording, clearRecording } = useEcgRecording();
+  const { recording, isRecording, clearRecording, ecgClassification } = useEcgRecording();
   const {
     recording: murmurRecording,
     isRecording: isMurmurRecording,
@@ -312,6 +312,64 @@ export default function CardioCapForm() {
       clearRecording();
     }
   }, [recording, isRecording, setValue, toast, clearRecording]);
+
+  // Auto-fill ECG Rate (BPM) from vitals sensor
+  useEffect(() => {
+    if (sensorBpm !== null) {
+      setValue("ecgRate", String(sensorBpm));
+    }
+  }, [sensorBpm, setValue]);
+
+  // Auto-fill ECG Rhythm + PVC/PAC burden from ECG classification
+  useEffect(() => {
+    if (!ecgClassification) return;
+
+    // Map overall_prediction to form rhythm enum
+    const prediction = ecgClassification.overall_prediction?.toLowerCase() ?? "";
+    let rhythm: "sinus_rhythm" | "sinus_tachycardia" | "sinus_bradycardia" | "atrial_fibrillation" | "irregular_rhythm" | undefined;
+
+    if (prediction.includes("normal")) {
+      rhythm = "sinus_rhythm";
+    } else if (prediction.includes("atrial") && prediction.includes("fibrillation")) {
+      rhythm = "atrial_fibrillation";
+    } else if (prediction.includes("supraventricular") || prediction.includes("atrial")) {
+      rhythm = "irregular_rhythm";
+    } else if (prediction.includes("ventricular") && !prediction.includes("supraventricular")) {
+      rhythm = "irregular_rhythm";
+    } else {
+      rhythm = "irregular_rhythm";
+    }
+
+    if (rhythm) {
+      setValue("ecgRhythm", rhythm);
+    }
+
+    // Auto-fill PVC burden from average_probabilities
+    const probs = ecgClassification.average_probabilities;
+    if (probs) {
+      // PVC burden: sum probabilities for ventricular ectopy classes
+      let pvcProb = 0;
+      let pacProb = 0;
+      for (const [key, value] of Object.entries(probs)) {
+        const k = key.toLowerCase();
+        if (
+          (k.includes("ventricular") && !k.includes("supraventricular")) ||
+          k.includes("pvc")
+        ) {
+          pvcProb += value;
+        }
+        if (
+          k.includes("supraventricular") ||
+          k.includes("atrial") ||
+          k.includes("pac")
+        ) {
+          pacProb += value;
+        }
+      }
+      setValue("pvcBurden", (pvcProb * 100).toFixed(1));
+      setValue("pacBurden", (pacProb * 100).toFixed(1));
+    }
+  }, [ecgClassification, setValue]);
 
   // Auto-fill Murmur data after recording stops
   useEffect(() => {
@@ -747,9 +805,20 @@ export default function CardioCapForm() {
                     name="ecgRate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t.ecg.rate}</FormLabel>
+                        <FormLabel className="flex items-center gap-2">
+                          {t.ecg.rate}
+                          {field.value && (
+                            <span className="text-xs text-green-600 font-medium">✓ Sensor</span>
+                          )}
+                        </FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="bpm" {...field} />
+                          <Input
+                            type="number"
+                            placeholder="Auto-filled from sensor"
+                            {...field}
+                            readOnly={!!field.value}
+                            className={field.value ? "bg-muted/50" : ""}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
@@ -939,11 +1008,20 @@ export default function CardioCapForm() {
                       name="pvcBurden"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-normal">
+                          <FormLabel className="text-sm font-normal flex items-center gap-2">
                             {t.ecg.pvcBurden}
+                            {field.value && (
+                              <span className="text-xs text-green-600 font-medium">✓ AI</span>
+                            )}
                           </FormLabel>
                           <FormControl>
-                            <Input type="number" placeholder="%" {...field} />
+                            <Input
+                              type="number"
+                              placeholder="Auto-filled from ECG analysis"
+                              {...field}
+                              readOnly={!!field.value}
+                              className={field.value ? "bg-muted/50" : ""}
+                            />
                           </FormControl>
                           <FormDescription>
                             {t.ecg.pvcBurdenDescription}
@@ -956,11 +1034,20 @@ export default function CardioCapForm() {
                       name="pacBurden"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-sm font-normal">
+                          <FormLabel className="text-sm font-normal flex items-center gap-2">
                             {t.ecg.pacBurden}
+                            {field.value && (
+                              <span className="text-xs text-green-600 font-medium">✓ AI</span>
+                            )}
                           </FormLabel>
                           <FormControl>
-                            <Input type="number" placeholder="%" {...field} />
+                            <Input
+                              type="number"
+                              placeholder="Auto-filled from ECG analysis"
+                              {...field}
+                              readOnly={!!field.value}
+                              className={field.value ? "bg-muted/50" : ""}
+                            />
                           </FormControl>
                         </FormItem>
                       )}
