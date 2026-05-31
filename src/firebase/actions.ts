@@ -24,9 +24,9 @@ const FormSchema = z.object({
   hnId: z.string().optional(),
   gender: z.enum(["male", "female"]).optional(),
   age: z.string().optional(),
-  ecgLead1: z.union([z.number(), z.array(z.number())]),
-  ecgLead2: z.union([z.number(), z.array(z.number())]),
-  ecgLead3: z.union([z.number(), z.array(z.number())]),
+  ecgLead1: z.union([z.number(), z.array(z.number())]).optional().default(0.1),
+  ecgLead2: z.union([z.number(), z.array(z.number())]).optional().default(0.1),
+  ecgLead3: z.union([z.number(), z.array(z.number())]).optional().default(0.1),
   oxygenSaturation: z.coerce.number(),
 });
 
@@ -79,14 +79,14 @@ export async function getRiskAnalysis(
     if (result.heartFailureRisk.level === "high") riskLevel = 3;
     if (result.overallSummary.overallAssessment === "consult_specialist") riskLevel = 4;
 
-    const { serverTimestamp } = await import("firebase-admin/firestore");
+    // const { serverTimestamp } = await import("firebase-admin/firestore");
 
     await assessmentsCollection.add({
       patientName: data.patientName,
       patientId: data.hnId,
       patientAge: data.age,
       patientGender: data.gender,
-      submissionTimestamp: serverTimestamp(),
+      // submissionTimestamp: serverTimestamp(),
       riskLevel: riskLevel,
       status: "pending",
       aiAnalysis: result,
