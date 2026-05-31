@@ -135,6 +135,48 @@ type AnalysisResult = {
   error?: string;
 };
 
+const mockFormValues: Partial<z.infer<typeof formSchema>> = {
+  hnId: "123456",
+  gender: "male",
+  age: "45",
+  isSmoker: true,
+  hasDiabetes: false,
+  weight: "72",
+  height: "168",
+  bmi: "25.51",
+  insurance: "social",
+  examDate: new Date().toISOString().split("T")[0],
+  examTime: "10:30",
+  examinerType: "professional",
+  examinerName: "Dr. Somchai",
+  ecgRhythm: "sinus_tachycardia",
+  ecgConduction: "normal",
+  bundleBranchBlockDetail: "",
+  sttChanges: "normal",
+  qtInterval: "360",
+  qtcInterval: "420",
+  qtcMethod: "Bazett",
+  artifactLevel: "low",
+  noiseSource: ["motion", "poor_contact"],
+  s1Intensity: "normal",
+  s2Intensity: "normal",
+  murmurDetection: true,
+  murmurGrade: "II",
+  murmurPosition: "mitral",
+  extraHeartSounds: ["s3_gallop"],
+  rhythmCharacteristics: "regular",
+  ppgHeartRate: "78",
+  oxygenSaturation: "98",
+  estimatedBp: "120 / 78 mmHg (Normal)",
+  hrv: "45",
+  bodyTemp: "36.8",
+  arterialStiffness: "normal",
+  ppgAbnormalPulse: ["arrhythmia"],
+  ecgLead1: "0.12",
+  ecgLead3: "0.14",
+  murmurAudioData: JSON.stringify([0, 1, 0, -1]),
+};
+
 const ResultDisplayItem: React.FC<{
   label: string;
   value: React.ReactNode;
@@ -229,6 +271,19 @@ export default function CardioCapForm() {
   const murmurDetected = watch("murmurDetection");
   const conduction = watch("ecgConduction");
   const examinerType = watch("examinerType");
+
+  const fillMockData = () => {
+    const currentValues = getValues();
+    form.reset({
+      ...currentValues,
+      ...mockFormValues,
+    });
+    toast({
+      title: "Mock data filled",
+      description:
+        "กรอกข้อมูล mock ครบทุกช่อง ยกเว้นชื่อผู้ป่วย, อัตรา ECG, PVC/PAC burden และ ECG Lead II",
+    });
+  };
 
   // Autofill patient name
   useEffect(() => {
@@ -1475,11 +1530,19 @@ export default function CardioCapForm() {
                 </div>
               </section>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={fillMockData}
+                className="w-full sm:w-auto"
+              >
+                กรอกข้อมูล Mock
+              </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90 sm:w-auto"
               >
                 {isSubmitting ? (
                   <>
