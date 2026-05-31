@@ -437,6 +437,17 @@ export default function CardioCapForm() {
           typeof ecgLead3 === "string" ? parseFloat(ecgLead3) : ecgLead3;
       }
 
+      // Handle null/NaN values - set default if missing
+      if (ecgLead1 === null || ecgLead1 === undefined || isNaN(ecgLead1)) {
+        ecgLead1 = 0.1;
+      }
+      if (ecgLead2 === null || ecgLead2 === undefined || isNaN(ecgLead2)) {
+        ecgLead2 = 0.1;
+      }
+      if (ecgLead3 === null || ecgLead3 === undefined || isNaN(ecgLead3)) {
+        ecgLead3 = 0.1;
+      }
+
       let murmurAudioData: any = values.murmurAudioData;
       try {
         murmurAudioData =
@@ -447,13 +458,31 @@ export default function CardioCapForm() {
         murmurAudioData = undefined;
       }
 
-      const submitData = {
-        ...values,
-        ecgLead1,
-        ecgLead2,
-        ecgLead3,
-        murmurAudioData: murmurAudioData || undefined,
-      };
+const submitData = {
+  ...values,
+  ecgLead1,
+  ecgLead2,
+  ecgLead3,
+
+  // แปลง string -> number
+  oxygenSaturation: values.oxygenSaturation
+    ? parseFloat(values.oxygenSaturation)
+    : undefined,
+
+  ppgHeartRate: values.ppgHeartRate
+    ? parseFloat(values.ppgHeartRate)
+    : undefined,
+
+  bodyTemp: values.bodyTemp
+    ? parseFloat(values.bodyTemp)
+    : undefined,
+
+  hrv: values.hrv
+    ? parseFloat(values.hrv)
+    : undefined,
+
+  murmurAudioData: murmurAudioData || undefined,
+};
 
       const response = await getRiskAnalysis(submitData as any);
 
