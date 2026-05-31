@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useMurmurRecording } from '@/context/murmur-context';
 import { usePPGCapture } from '@/context/ppg-context';
+import { useVitals } from '@/context/vitals-context';
 import { useToast } from '@/hooks/use-toast';
 
 const dummyPrediction = {
@@ -21,11 +22,10 @@ const dummyPrediction = {
 export function StethoscopeSensorCard() {
   const murmurContext = useMurmurRecording();
   const ppgContext = usePPGCapture();
+  const vitals = useVitals();
   const { toast } = useToast();
 
-  const [bpm, setBpm] = useState<number | null>(null);
-  const [spo2, setSpo2] = useState<number | null>(null);
-  const [temp, setTemp] = useState<number | null>(null);
+  const { bpm, spo2, temp, setBpm, setSpo2, setTemp } = vitals;
   const [progress, setProgress] = useState(0);
   const [showPrediction, setShowPrediction] = useState(false);
   // A local copy of captured samples used only for WAV export
@@ -132,7 +132,8 @@ export function StethoscopeSensorCard() {
 
       if (data.bpm)  setBpm(data.bpm);
       if (data.spo2) {
-        setSpo2(data.spo2 > 100 ? 100 : data.spo2);
+        const clamped = data.spo2 > 100 ? 100 : data.spo2;
+        setSpo2(clamped);
         // Normalize spo2 (0-100) to PPG sample (-1 to 1 range)
         const ppgSample = (data.spo2 / 50) - 1; // Maps 0-100 to -1 to 1
         addPPGSampleRef.current(ppgSample);

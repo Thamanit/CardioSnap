@@ -5,6 +5,7 @@ import { FirebaseClientProvider } from '@/firebase';
 import { EcgProvider } from '@/context/ecg-context';
 import { MurmurProvider } from '@/context/murmur-context';
 import { PPGProvider } from '@/context/ppg-context';
+import { VitalsProvider } from '@/context/vitals-context';
 
 export const metadata: Metadata = {
   title: 'CardioSnap',
@@ -28,7 +29,9 @@ export default function RootLayout({
           <EcgProvider>
             <MurmurProvider>
               <PPGProvider>
-                {children}
+                <VitalsProvider>
+                  {children}
+                </VitalsProvider>
               </PPGProvider>
             </MurmurProvider>
           </EcgProvider>

@@ -58,6 +58,7 @@ import { useLanguage } from "@/context/language-context";
 import { useEcgRecording } from "@/context/ecg-context";
 import { useMurmurRecording } from "@/context/murmur-context";
 import { usePPGCapture } from "@/context/ppg-context";
+import { useVitals } from "@/context/vitals-context";
 
 const formSchema = z.object({
   // Section 1: Patient Information
@@ -175,6 +176,7 @@ export default function CardioCapForm() {
     clearRecording: clearMurmurRecording,
   } = useMurmurRecording();
   const { ppgWavBlob } = usePPGCapture();
+  const { bpm: sensorBpm, spo2: sensorSpo2, temp: sensorTemp } = useVitals();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -327,6 +329,25 @@ export default function CardioCapForm() {
       clearMurmurRecording();
     }
   }, [murmurRecording, isMurmurRecording, setValue, toast, clearMurmurRecording]);
+
+  // Auto-fill PPG fields (BPM, SpO2, Temp) from vitals context (stethoscope sensor)
+  useEffect(() => {
+    if (sensorBpm !== null) {
+      setValue("ppgHeartRate", String(sensorBpm));
+    }
+  }, [sensorBpm, setValue]);
+
+  useEffect(() => {
+    if (sensorSpo2 !== null) {
+      setValue("oxygenSaturation", String(sensorSpo2));
+    }
+  }, [sensorSpo2, setValue]);
+
+  useEffect(() => {
+    if (sensorTemp !== null) {
+      setValue("bodyTemp", String(sensorTemp));
+    }
+  }, [sensorTemp, setValue]);
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsSubmitting(true);
@@ -1304,9 +1325,20 @@ export default function CardioCapForm() {
                     name="ppgHeartRate"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t.ppg.hr}</FormLabel>
+                        <FormLabel className="flex items-center gap-2">
+                          {t.ppg.hr}
+                          {field.value && (
+                            <span className="text-xs text-green-600 font-medium">✓ Sensor</span>
+                          )}
+                        </FormLabel>
                         <FormControl>
-                          <Input type="number" placeholder="bpm" {...field} />
+                          <Input
+                            type="number"
+                            placeholder="Auto-filled from sensor"
+                            {...field}
+                            readOnly={!!field.value}
+                            className={field.value ? "bg-muted/50" : ""}
+                          />
                         </FormControl>
                       </FormItem>
                     )}
@@ -1316,15 +1348,20 @@ export default function CardioCapForm() {
                     name="oxygenSaturation"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="flex items-center">
+                        <FormLabel className="flex items-center gap-2">
                           {t.ppg.spo2}
+                          {field.value && (
+                            <span className="text-xs text-green-600 font-medium">✓ Sensor</span>
+                          )}
                         </FormLabel>
                         <FormControl>
                           <Input
                             type="number"
                             step="0.1"
-                            placeholder="e.g., 98.5"
+                            placeholder="Auto-filled from sensor"
                             {...field}
+                            readOnly={!!field.value}
+                            className={field.value ? "bg-muted/50" : ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -1391,13 +1428,20 @@ export default function CardioCapForm() {
                     name="bodyTemp"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>{t.ppg.temp}</FormLabel>
+                        <FormLabel className="flex items-center gap-2">
+                          {t.ppg.temp}
+                          {field.value && (
+                            <span className="text-xs text-green-600 font-medium">✓ Sensor</span>
+                          )}
+                        </FormLabel>
                         <FormControl>
                           <Input
                             type="number"
                             step="0.1"
-                            placeholder="°C"
+                            placeholder="Auto-filled from sensor"
                             {...field}
+                            readOnly={!!field.value}
+                            className={field.value ? "bg-muted/50" : ""}
                           />
                         </FormControl>
                       </FormItem>
