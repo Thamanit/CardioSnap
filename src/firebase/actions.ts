@@ -69,6 +69,14 @@ export async function getRiskAnalysis(
       oxygenSaturation: data.oxygenSaturation,
     };
 
+    console.log("validatedData:", validatedData);
+console.log("types:", {
+  ecgLead1: typeof validatedData.ecgLead1,
+  ecgLead2: typeof validatedData.ecgLead2,
+  ecgLead3: typeof validatedData.ecgLead3,
+  oxygenSaturation: typeof validatedData.oxygenSaturation,
+});
+
     const result = await riskFactorAnalysis(validatedData);
 
     const { firestore } = initializeFirebase();
