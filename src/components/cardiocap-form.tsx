@@ -447,13 +447,31 @@ export default function CardioCapForm() {
         murmurAudioData = undefined;
       }
 
-      const submitData = {
-        ...values,
-        ecgLead1,
-        ecgLead2,
-        ecgLead3,
-        murmurAudioData: murmurAudioData || undefined,
-      };
+const submitData = {
+  ...values,
+  ecgLead1,
+  ecgLead2,
+  ecgLead3,
+
+  // แปลง string -> number
+  oxygenSaturation: values.oxygenSaturation
+    ? parseFloat(values.oxygenSaturation)
+    : undefined,
+
+  ppgHeartRate: values.ppgHeartRate
+    ? parseFloat(values.ppgHeartRate)
+    : undefined,
+
+  bodyTemp: values.bodyTemp
+    ? parseFloat(values.bodyTemp)
+    : undefined,
+
+  hrv: values.hrv
+    ? parseFloat(values.hrv)
+    : undefined,
+
+  murmurAudioData: murmurAudioData || undefined,
+};
 
       const response = await getRiskAnalysis(submitData as any);
 
