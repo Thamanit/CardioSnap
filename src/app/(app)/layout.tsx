@@ -4,8 +4,7 @@
 import React, { useEffect } from "react";
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from "firebase/auth";
-import { ArrowLeft, LayoutDashboard, FileText, Bot, Menu, BookHeart, UserCircle } from "lucide-react";
+import { FileText, Bot, Menu, BookHeart, UserCircle } from "lucide-react";
 import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,8 +13,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useAuth, useUser } from "@/firebase";
+import { useUser } from "@/firebase";
 import { useRouter } from "next/navigation";
+import { supabaseSignOut } from "@/firebase/supabase-auth";
 import Loading from "../loading";
 import { LanguageProvider, useLanguage } from "@/context/language-context";
 
@@ -43,7 +43,6 @@ function AppLayoutContent({
 }) {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
-  const auth = useAuth();
   const pathname = usePathname();
   const { lang, setLang } = useLanguage();
   const t = translations[lang];
@@ -59,7 +58,7 @@ function AppLayoutContent({
   }
 
   const handleSignOut = async () => {
-    await signOut(auth);
+    await supabaseSignOut();
     router.push('/');
   };
 

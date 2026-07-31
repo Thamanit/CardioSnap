@@ -5,12 +5,21 @@ import { FirebaseApp } from 'firebase/app';
 import { Firestore } from 'firebase/firestore';
 import { Auth, User, onAuthStateChanged } from 'firebase/auth';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener'
+import { supabase } from '@/lib/supabase';
 
 interface FirebaseProviderProps {
   children: ReactNode;
   firebaseApp: FirebaseApp;
   firestore: Firestore;
   auth: Auth;
+}
+
+interface AppAuthUser {
+  uid?: string;
+  id?: string;
+  email?: string | null;
+  displayName?: string | null;
+  user_metadata?: Record<string, any>;
 }
 
 // Internal state for user authentication
@@ -44,7 +53,7 @@ export interface FirebaseServicesAndUser {
 
 // Return type for useUser() - specific to user auth state
 export interface UserHookResult { // Renamed from UserAuthHookResult for consistency if desired, or keep as UserAuthHookResult
-  user: User | null;
+  user: AppAuthUser | null;
   isUserLoading: boolean;
   userError: Error | null;
 }
@@ -65,6 +74,16 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     user: null,
     isUserLoading: true, // Start loading until first auth event
     userError: null,
+  });
+  const [supabaseUser, setSupabaseUser] = useState<AppAuthUser | null>(null);
+  const [supabaseAuthLoading, setSupabaseAuthLoading] = useState(true);
+
+  const normalizeSupabaseUser = (user: any): AppAuthUser => ({
+    ...user,
+    uid: user?.id ?? user?.uid,
+    displayName: user?.user_metadata?.full_name || user?.user_metadata?.first_name
+      ? `${user?.user_metadata?.first_name ?? ''} ${user?.user_metadata?.last_name ?? ''}`.trim()
+      : null,
   });
 
   // Effect to subscribe to Firebase auth state changes
@@ -89,19 +108,51 @@ export const FirebaseProvider: React.FC<FirebaseProviderProps> = ({
     return () => unsubscribe(); // Cleanup
   }, [auth]); // Depends on the auth instance
 
+  useEffect(() => {
+    if (!supabase) {
+      setSupabaseUser(null);
+      setSupabaseAuthLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const initializeSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!isMounted) return;
+      setSupabaseUser(session?.user ? normalizeSupabaseUser(session.user) : null);
+      setSupabaseAuthLoading(false);
+    };
+
+    void initializeSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return;
+      setSupabaseUser(session?.user ? normalizeSupabaseUser(session.user) : null);
+      setSupabaseAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   // Memoize the context value
   const contextValue = useMemo((): FirebaseContextState => {
     const servicesAvailable = !!(firebaseApp && firestore && auth);
+    const usingSupabase = !!supabase;
+
     return {
       areServicesAvailable: servicesAvailable,
       firebaseApp: servicesAvailable ? firebaseApp : null,
       firestore: servicesAvailable ? firestore : null,
       auth: servicesAvailable ? auth : null,
-      user: userAuthState.user,
-      isUserLoading: userAuthState.isUserLoading,
+      user: usingSupabase ? supabaseUser : userAuthState.user,
+      isUserLoading: usingSupabase ? supabaseAuthLoading : userAuthState.isUserLoading,
       userError: userAuthState.userError,
     };
-  }, [firebaseApp, firestore, auth, userAuthState]);
+  }, [firebaseApp, firestore, auth, userAuthState, supabaseUser, supabaseAuthLoading]);
 
   return (
     <FirebaseContext.Provider value={contextValue}>
