@@ -13,9 +13,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { useUser } from "@/firebase";
+import { useUser } from "@/supabase";
 import { useRouter } from "next/navigation";
-import { supabaseSignOut } from "@/firebase/supabase-auth";
+import { supabaseSignOut } from "@/supabase/auth";
 import Loading from "../loading";
 import { LanguageProvider, useLanguage } from "@/context/language-context";
 

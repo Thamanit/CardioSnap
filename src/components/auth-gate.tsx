@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
-import { supabaseSignIn, supabaseSignUp } from '@/firebase/supabase-auth';
+import { supabaseSignIn, supabaseSignUp } from '@/supabase/auth';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';

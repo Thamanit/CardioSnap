@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { classifyBP, type BPResult } from "@/firebase/actions";
+import { classifyBP, type BPResult } from "@/app/actions";
 import {
   Loader2,
   WandSparkles,
@@ -38,7 +38,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getRiskAnalysis } from "@/firebase/actions";
+import { getRiskAnalysis } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "./ui/separator";
 import { Checkbox } from "./ui/checkbox";
@@ -53,7 +53,7 @@ import {
 import type { RiskFactorAnalysisOutput } from "@/ai/flows/risk-factor-analysis";
 import { Badge } from "./ui/badge";
 import { translations } from "@/lib/translations";
-import { useUser } from "@/firebase";
+import { useUser } from "@/supabase";
 import { useLanguage } from "@/context/language-context";
 import { useEcgRecording } from "@/context/ecg-context";
 import { useMurmurRecording } from "@/context/murmur-context";

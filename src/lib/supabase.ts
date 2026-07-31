@@ -21,3 +21,25 @@ export function getSupabaseClient(): SupabaseClient {
 
   return supabase;
 }
+
+/**
+ * Creates a Supabase client using the service role key.
+ * This client bypasses RLS and should ONLY be used in server-side code (e.g., server actions).
+ */
+export function createServerSupabaseClient(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      'Missing server-side Supabase environment variables. Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.'
+    );
+  }
+
+  return createClient(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}

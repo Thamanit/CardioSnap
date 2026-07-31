@@ -4,7 +4,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useUser } from '@/firebase';
+import { useUser } from '@/supabase';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
