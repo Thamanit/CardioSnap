@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser } from "@/firebase";
+import { useUser } from "@/supabase";
 import Loading from "./loading";
 import { AuthGate } from "@/components/auth-gate";
 import { useEffect } from "react";

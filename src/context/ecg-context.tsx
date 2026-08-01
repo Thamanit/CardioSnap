@@ -1,6 +1,6 @@
 'use client';
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { classifyEcg } from '@/firebase/actions';
+import { classifyEcg } from '@/app/actions';
 
 interface EcgRecording {
   lead1: number[];

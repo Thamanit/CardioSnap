@@ -1,8 +1,7 @@
 'use client';
 import { useState } from 'react';
-import { useAuth } from '@/firebase';
-import { initiateEmailSignIn, initiateEmailSignUp } from '@/firebase/non-blocking-login';
 import { Eye, EyeOff } from 'lucide-react';
+import { supabaseSignIn, supabaseSignUp } from '@/supabase/auth';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,7 +11,6 @@ import { Icons } from './icons';
 import { Alert, AlertDescription } from './ui/alert';
 
 export function AuthGate() {
-  const auth = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
@@ -29,26 +27,30 @@ export function AuthGate() {
     setAuthError(null);
   }
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     setAuthError(null);
-    initiateEmailSignIn(auth, email, password, (error) => {
-       if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+    try {
+      await supabaseSignIn(email, password);
+    } catch (error: any) {
+      if (error?.message?.includes('Invalid login')) {
         setAuthError('Invalid credentials. Please check your email and password.');
       } else {
         setAuthError('An unexpected error occurred. Please try again.');
       }
-    });
+    }
   };
 
   const handleSignUp = async () => {
     setAuthError(null);
-    await initiateEmailSignUp(auth, email, password, firstName, lastName, (error) => {
-      if (error.code === 'auth/email-already-in-use') {
+    try {
+      await supabaseSignUp(email, password, firstName, lastName);
+    } catch (error: any) {
+      if (error?.message?.includes('already registered')) {
         setAuthError('This email is already in use. Please sign in instead.');
       } else {
         setAuthError('An unexpected error occurred during sign up. Please try again.');
       }
-    });
+    }
   };
 
   const toggleForm = () => {

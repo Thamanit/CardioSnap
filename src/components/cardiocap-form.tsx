@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { classifyBP, type BPResult } from "@/firebase/actions";
+import { classifyBP, type BPResult } from "@/app/actions";
 import {
   Loader2,
   WandSparkles,
@@ -38,7 +38,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getRiskAnalysis } from "@/firebase/actions";
+import { getRiskAnalysis } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "./ui/separator";
 import { Checkbox } from "./ui/checkbox";
@@ -53,7 +53,7 @@ import {
 import type { RiskFactorAnalysisOutput } from "@/ai/flows/risk-factor-analysis";
 import { Badge } from "./ui/badge";
 import { translations } from "@/lib/translations";
-import { useUser } from "@/firebase";
+import { useUser } from "@/supabase";
 import { useLanguage } from "@/context/language-context";
 import { useEcgRecording } from "@/context/ecg-context";
 import { useMurmurRecording } from "@/context/murmur-context";
@@ -130,6 +130,46 @@ const formSchema = z.object({
   ecgLead3: z.string().optional(),
   murmurAudioData: z.string().optional(),
 });
+
+const mockFormValues: Partial<z.infer<typeof formSchema>> = {
+  hnId: "123456",
+  gender: "male",
+  age: "45",
+  isSmoker: true,
+  hasDiabetes: false,
+  weight: "72",
+  height: "168",
+  bmi: "25.51",
+  insurance: "social",
+  examDate: new Date().toISOString().split("T")[0],
+  examTime: "10:30",
+  examinerType: "professional",
+  examinerName: "Dr. Somchai",
+  ecgRhythm: "sinus_tachycardia",
+  ecgConduction: "normal",
+  bundleBranchBlockDetail: "",
+  sttChanges: "normal",
+  qtInterval: "360",
+  qtcInterval: "420",
+  qtcMethod: "Bazett",
+  artifactLevel: "low",
+  noiseSource: ["motion", "poor_contact"],
+  s1Intensity: "normal",
+  s2Intensity: "normal",
+  murmurDetection: true,
+  murmurGrade: "II",
+  murmurPosition: "mitral",
+  extraHeartSounds: ["s3_gallop"],
+  rhythmCharacteristics: "regular",
+  estimatedBp: "120 / 78 mmHg (Normal)",
+  hrv: "45",
+  arterialStiffness: "normal",
+  ppgAbnormalPulse: ["arrhythmia"],
+  ecgLead1: "0.12",
+  ecgLead3: "0.14",
+  murmurAudioData: JSON.stringify([0, 1, 0, -1]),
+};
+
 
 type AnalysisResult = {
   analysis?: RiskFactorAnalysisOutput;
@@ -231,6 +271,29 @@ export default function CardioCapForm() {
   const murmurDetected = watch("murmurDetection");
   const conduction = watch("ecgConduction");
   const examinerType = watch("examinerType");
+
+
+  const fillMockData = () => {
+    const current = getValues();
+    const protectedFields = [
+      "ecgRate", "pvcBurden", "pacBurden",
+      "ppgHeartRate", "oxygenSaturation", "bodyTemp",
+    ] as const;
+
+    const safeOverrides = { ...mockFormValues };
+    for (const key of protectedFields) {
+      if (current[key]) {
+        delete (safeOverrides as any)[key];
+      }
+    }
+
+    form.reset({ ...current, ...safeOverrides });
+    toast({
+      title: "Mock data filled",
+      description: "กรอกข้อมูล mock ครบทุกช่อง ยกเว้นฟิลด์ที่ sensor กรอกไว้แล้ว",
+    });
+  };
+
 
   // Autofill patient name
   useEffect(() => {
@@ -432,6 +495,17 @@ export default function CardioCapForm() {
           typeof ecgLead3 === "string" ? parseFloat(ecgLead3) : ecgLead3;
       }
 
+      // Handle null/NaN values - set default if missing
+      if (ecgLead1 === null || ecgLead1 === undefined || isNaN(ecgLead1)) {
+        ecgLead1 = 0.1;
+      }
+      if (ecgLead2 === null || ecgLead2 === undefined || isNaN(ecgLead2)) {
+        ecgLead2 = 0.1;
+      }
+      if (ecgLead3 === null || ecgLead3 === undefined || isNaN(ecgLead3)) {
+        ecgLead3 = 0.1;
+      }
+
       let murmurAudioData: any = values.murmurAudioData;
       try {
         murmurAudioData =
@@ -442,13 +516,31 @@ export default function CardioCapForm() {
         murmurAudioData = undefined;
       }
 
-      const submitData = {
-        ...values,
-        ecgLead1,
-        ecgLead2,
-        ecgLead3,
-        murmurAudioData: murmurAudioData || undefined,
-      };
+const submitData = {
+  ...values,
+  ecgLead1,
+  ecgLead2,
+  ecgLead3,
+
+  // แปลง string -> number
+  oxygenSaturation: values.oxygenSaturation
+    ? parseFloat(values.oxygenSaturation)
+    : undefined,
+
+  ppgHeartRate: values.ppgHeartRate
+    ? parseFloat(values.ppgHeartRate)
+    : undefined,
+
+  bodyTemp: values.bodyTemp
+    ? parseFloat(values.bodyTemp)
+    : undefined,
+
+  hrv: values.hrv
+    ? parseFloat(values.hrv)
+    : undefined,
+
+  murmurAudioData: murmurAudioData || undefined,
+};
 
       const response = await getRiskAnalysis(submitData as any);
 
@@ -1124,10 +1216,10 @@ export default function CardioCapForm() {
                                       return checked
                                         ? field.onChange([...current, item.id])
                                         : field.onChange(
-                                            current.filter(
-                                              (value) => value !== item.id
-                                            )
-                                          );
+                                          current.filter(
+                                            (value) => value !== item.id
+                                          )
+                                        );
                                     }}
                                   />
                                 </FormControl>
@@ -1339,10 +1431,10 @@ export default function CardioCapForm() {
                                   return checked
                                     ? field.onChange([...current, item.id])
                                     : field.onChange(
-                                        current.filter(
-                                          (value) => value !== item.id
-                                        )
-                                      );
+                                      current.filter(
+                                        (value) => value !== item.id
+                                      )
+                                    );
                                 }}
                               />
                             </FormControl>
@@ -1588,10 +1680,10 @@ export default function CardioCapForm() {
                                   return checked
                                     ? field.onChange([...current, item.id])
                                     : field.onChange(
-                                        current.filter(
-                                          (value) => value !== item.id
-                                        )
-                                      );
+                                      current.filter(
+                                        (value) => value !== item.id
+                                      )
+                                    );
                                 }}
                               />
                             </FormControl>
@@ -1606,11 +1698,19 @@ export default function CardioCapForm() {
                 </div>
               </section>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={fillMockData}
+                className="w-full sm:w-auto"
+              >
+                กรอกข้อมูล Mock
+              </Button>
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90 sm:w-auto"
               >
                 {isSubmitting ? (
                   <>
@@ -1869,13 +1969,13 @@ export default function CardioCapForm() {
                       )}
                       {result.analysis.ppgAbnormalities.abnormalPulseShape !==
                         "None" && (
-                        <ResultDisplayItem
-                          label={t.results.ppg.abnormalPulse}
-                          value={
-                            result.analysis.ppgAbnormalities.abnormalPulseShape
-                          }
-                        />
-                      )}
+                          <ResultDisplayItem
+                            label={t.results.ppg.abnormalPulse}
+                            value={
+                              result.analysis.ppgAbnormalities.abnormalPulseShape
+                            }
+                          />
+                        )}
                     </>
                   ) : (
                     <p>{t.results.none}</p>
