@@ -34,6 +34,8 @@ export function AuthGate() {
     } catch (error: any) {
       if (error?.message?.includes('Invalid login')) {
         setAuthError('Invalid credentials. Please check your email and password.');
+      } else if (error?.message) {
+        setAuthError(error.message);
       } else {
         setAuthError('An unexpected error occurred. Please try again.');
       }
@@ -47,6 +49,8 @@ export function AuthGate() {
     } catch (error: any) {
       if (error?.message?.includes('already registered')) {
         setAuthError('This email is already in use. Please sign in instead.');
+      } else if (error?.message) {
+        setAuthError(error.message);
       } else {
         setAuthError('An unexpected error occurred during sign up. Please try again.');
       }
