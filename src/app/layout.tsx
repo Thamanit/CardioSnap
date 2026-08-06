@@ -7,12 +7,10 @@ import { MurmurProvider } from '@/context/murmur-context';
 import { PPGProvider } from '@/context/ppg-context';
 import { VitalsProvider } from '@/context/vitals-context';
 
-const cardioLogo = new URL('./(app)/cardioLOGO.png', import.meta.url);
-
 export const metadata: Metadata = {
   title: 'CardioSnap',
   description: 'An AI-powered cardiovascular risk assessment tool.',
-  icons: [{ rel: 'icon', url: cardioLogo }],
+  icons: [{ rel: 'icon', url: '/cardioLOGO.png' }],
 };
 
 export default function RootLayout({
