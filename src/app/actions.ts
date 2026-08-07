@@ -67,12 +67,50 @@ const FormSchema = z.object({
   ecgLead3: z.union([z.number(), z.array(z.number())]).optional().default(0.1),
 });
 
+function parseNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.replace(/[^0-9.-]/g, "").trim();
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function parseIntNumber(value: unknown): number | null {
+  const parsed = parseNumber(value);
+  return parsed !== null ? Math.round(parsed) : null;
+}
+
+function parseBp(value: unknown): { sbp: number | null; dbp: number | null } {
+  if (typeof value !== "string") {
+    return { sbp: null, dbp: null };
+  }
+  const match = value.match(/(\d+)\s*\/\s*(\d+)/);
+  if (!match) return { sbp: null, dbp: null };
+  return { sbp: parseInt(match[1], 10), dbp: parseInt(match[2], 10) };
+}
+
+function parseMurmurGrade(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.round(value);
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toUpperCase();
+    return { I: 1, II: 2, III: 3, IV: 4, V: 5 }[normalized] ?? null;
+  }
+  return null;
+}
+
 // ─────────────────────────────────────────────
 // MAIN RISK ANALYSIS ACTION
 // ─────────────────────────────────────────────
 
 export async function getRiskAnalysis(
-  data: z.infer<typeof FormSchema>
+  data: z.infer<typeof FormSchema>,
+  examId?: number
 ): Promise<{ success: boolean; data?: RiskFactorAnalysisOutput; error?: string }> {
   try {
     let lead1Data: any = data.ecgLead1;
@@ -240,18 +278,21 @@ export async function getRiskAnalysis(
         }
       }
 
-      // 4. Insert AI results
-      const { error: aiError } = await supabase.from("ai_results").insert({
-        exam_id: examId,
-        ecg_class: ecgClassLabel ?? null,
-        pcg_class: result.stethoscopeAbnormalities.murmur.detected ? "Murmur" : "Normal",
-        bp_category: null,
-        heart_risk: result.heartFailureRisk.level,
-        confidence_score: null,
-      });
+      // 4. Insert AI results only when examId is provided
+      if (examId) {
+        const { error: aiError } = await supabase.from("ai_results").insert({
+          exam_id: examId,
+          ecg_class: ecgClassLabel ?? null,
+          pcg_class: result.stethoscopeAbnormalities.murmur.detected ? "Murmur" : "Normal",
+          bp_category: null,
+          heart_risk: result.heartFailureRisk.level,
+          confidence_score: null,
+          created_at: new Date().toISOString(),
+        });
 
-      if (aiError) {
-        console.error("Error inserting AI results:", aiError);
+        if (aiError) {
+          console.error("Error inserting AI results:", aiError);
+        }
       }
     }
 
@@ -261,6 +302,145 @@ export async function getRiskAnalysis(
     const errorMessage =
       error instanceof Error ? error.message : "An unexpected error occurred.";
     return { success: false, error: errorMessage };
+  }
+}
+
+export async function saveCardioCapForm(
+  data: Record<string, unknown>
+): Promise<{ success: boolean; examId?: number; error?: string }> {
+  try {
+    const supabase = createServerSupabaseClient();
+
+    const { data: patient, error: patientError } = await supabase
+      .from("patients")
+      .insert({
+        name: typeof data.patientName === "string" ? data.patientName : null,
+        gender: typeof data.gender === "string" ? data.gender : null,
+        age: parseIntNumber(data.age),
+        weight: parseNumber(data.weight),
+        height: parseIntNumber(data.height),
+        bmi: parseNumber(data.bmi),
+        smoking: data.isSmoker === true,
+        diabetes: data.hasDiabetes === true,
+        created_at: new Date().toISOString(),
+      })
+      .select("patient_id")
+      .single();
+
+    if (patientError || !patient?.patient_id) {
+      console.error("Error inserting patient:", patientError);
+      return {
+        success: false,
+        error: patientError?.message || "Failed to insert patient.",
+      };
+    }
+
+    const patientId = patient.patient_id;
+    const examDatetime =
+      typeof data.examDate === "string" && typeof data.examTime === "string"
+        ? new Date(`${data.examDate}T${data.examTime}`).toISOString()
+        : new Date().toISOString();
+
+    const { data: exam, error: examError } = await supabase
+      .from("examinations")
+      .insert({
+        patient_id: patientId,
+        exam_datetime: examDatetime,
+        exam_type: typeof data.examinerType === "string" ? data.examinerType : "self",
+        notes:
+          typeof data.examinerName === "string"
+            ? `Examiner: ${data.examinerName}`
+            : null,
+        created_at: new Date().toISOString(),
+      })
+      .select("exam_id")
+      .single();
+
+    if (examError || !exam?.exam_id) {
+      console.error("Error inserting examination:", examError);
+      return {
+        success: false,
+        error: examError?.message || "Failed to insert examination.",
+      };
+    }
+
+    const examId = exam.exam_id;
+    const { sbp, dbp } = parseBp(data.estimatedBp);
+    const extraSounds = Array.isArray(data.extraHeartSounds)
+      ? data.extraHeartSounds.map(String)
+      : [];
+
+    const sensorResults = await Promise.allSettled([
+      supabase.from("ecg_results").insert({
+        exam_id: examId,
+        heart_rate: parseIntNumber(data.ecgRate),
+        rhythm: typeof data.ecgRhythm === "string" ? data.ecgRhythm : null,
+        pr_interval: null,
+        qrs_duration: null,
+        qt: parseIntNumber(data.qtInterval),
+        qtc: parseIntNumber(data.qtcInterval),
+        st_status: typeof data.sttChanges === "string" ? data.sttChanges : null,
+        pvc_percent: parseNumber(data.pvcBurden),
+        pac_percent: parseNumber(data.pacBurden),
+        signal_quality:
+          typeof data.artifactLevel === "string" ? data.artifactLevel : null,
+        created_at: new Date().toISOString(),
+      }),
+      supabase.from("ppg_ecg_results").insert({
+        exam_id: examId,
+        hr: parseIntNumber(data.ppgHeartRate),
+        spo2: parseIntNumber(data.oxygenSaturation),
+        sbp,
+        dbp,
+        hrv: parseIntNumber(data.hrv),
+        temperature: parseNumber(data.bodyTemp),
+        arterial_stiffness: parseNumber(data.arterialStiffness),
+        created_at: new Date().toISOString(),
+      }),
+      supabase.from("ppg_results").insert({
+        exam_id: examId,
+        hr: parseIntNumber(data.ppgHeartRate),
+        spo2: parseIntNumber(data.oxygenSaturation),
+        sbp,
+        dbp,
+        hrv: parseIntNumber(data.hrv),
+        temperature: parseNumber(data.bodyTemp),
+        arterial_stiffness: parseNumber(data.arterialStiffness),
+        created_at: new Date().toISOString(),
+      }),
+      supabase.from("pcg_results").insert({
+        exam_id: examId,
+        s1_intensity: parseNumber(data.s1Intensity),
+        s2_intensity: parseNumber(data.s2Intensity),
+        murmur: data.murmurDetection === true,
+        murmur_grade: parseMurmurGrade(data.murmurGrade),
+        murmur_type:
+          typeof data.murmurPosition === "string" ? data.murmurPosition : null,
+        s3: extraSounds.includes("s3_gallop"),
+        s4: extraSounds.includes("s4_gallop"),
+        created_at: new Date().toISOString(),
+      }),
+    ]);
+
+    const rejected = sensorResults.filter(
+      (item) => item.status === "rejected"
+    ) as PromiseRejectedResult[];
+
+    if (rejected.length > 0) {
+      console.error("Error inserting sensor rows:", rejected.map((item) => item.reason));
+      return {
+        success: false,
+        error: "Failed to insert one or more sensor rows.",
+      };
+    }
+
+    return { success: true, examId };
+  } catch (error) {
+    console.error("Error in saveCardioCapForm action:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to save form data.",
+    };
   }
 }
 

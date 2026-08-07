@@ -7,6 +7,8 @@ export const translations = {
     form: {
       title: "การป้อนข้อมูลหัวใจและหลอดเลือดที่ครอบคลุม",
       description: "กรุณากรอกข้อมูลผู้ป่วยและข้อมูลเซ็นเซอร์ด้านล่าง ฟิลด์ที่จำเป็นสำหรับการวิเคราะห์ AI จะถูกทำเครื่องหมายไว้",
+      fillMockButton: "กรอกข้อมูล Mock",
+      fillMockAllButton: "กรอกข้อมูล Mock ทุกช่อง",
       submitButton: {
         idle: "ประเมินความเสี่ยง",
         submitting: "กำลังวิเคราะห์...",
@@ -224,6 +226,8 @@ export const translations = {
     form: {
         title: "Comprehensive Cardiovascular Data Input",
         description: "Please fill in the patient and sensor data below. Fields required for AI analysis are marked.",
+        fillMockButton: "Fill Mock Data",
+        fillMockAllButton: "Fill All Mock Data",
         submitButton: {
             idle: "Assess Risk",
             submitting: "Analyzing...",

@@ -38,7 +38,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getRiskAnalysis } from "@/app/actions";
+import { getRiskAnalysis, saveCardioCapForm } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "./ui/separator";
 import { Checkbox } from "./ui/checkbox";
@@ -167,7 +167,12 @@ const mockFormValues: Partial<z.infer<typeof formSchema>> = {
   ppgAbnormalPulse: ["arrhythmia"],
   ecgLead1: "0.12",
   ecgLead3: "0.14",
-  murmurAudioData: JSON.stringify([0, 1, 0, -1]),
+  ecgLead2: JSON.stringify([0, 1, 0, -1]),
+  ecgRate: "85",
+  pvcBurden: "2",
+  pacBurden: "1",
+  ppgHeartRate: "82",
+  patientName: "John Doe",
 };
 
 
@@ -294,6 +299,13 @@ export default function CardioCapForm() {
     });
   };
 
+  const fillMockDataAll = () => {
+    form.reset(mockFormValues);
+    toast({
+      title: "Mock data filled",
+      description: "กรอกข้อมูล mock ทุกช่องเรียบร้อยแล้ว",
+    });
+  };
 
   // Autofill patient name
   useEffect(() => {
@@ -542,7 +554,12 @@ const submitData = {
   murmurAudioData: murmurAudioData || undefined,
 };
 
-      const response = await getRiskAnalysis(submitData as any);
+      const saveResult = await saveCardioCapForm(submitData as any);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error || "Failed to save form data to Supabase.");
+      }
+
+      const response = await getRiskAnalysis(submitData as any, saveResult.examId);
 
       if (response.success && response.data) {
         setResult({ analysis: response.data });
@@ -1705,7 +1722,15 @@ const submitData = {
                 onClick={fillMockData}
                 className="w-full sm:w-auto"
               >
-                กรอกข้อมูล Mock
+                {t.form.fillMockButton}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={fillMockDataAll}
+                className="w-full sm:w-auto"
+              >
+                {t.form.fillMockAllButton}
               </Button>
               <Button
                 type="submit"
