@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { LineChart, Circle, Square } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { LineChart } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useEcgRecording } from '@/context/ecg-context';
@@ -9,120 +9,122 @@ import { useEcgRecording } from '@/context/ecg-context';
 export function EcgSensorCard() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const buffer = useRef<number[]>(new Array(300).fill(0));
-  const leadCounterRef = useRef(0); // distribute samples to lead1, lead2, lead3
-  const {
-    recording,
-    isRecording,
-    recordingDuration,
-    ecgClassification,
-    startRecording,
-    stopRecording,
-    addEcgSample,
-  } = useEcgRecording();
+  const [speed, setSpeed] = useState(100);
+  const [scale, setScale] = useState(1.3);
+  const [voltage, setVoltage] = useState<number | null>(null);
+  const { ecgClassification, addEcgSample } = useEcgRecording();
 
   const draw = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.beginPath();
-    buffer.current.forEach((v, i) => {
-      const x = (i * canvas.width) / buffer.current.length;
-      let y = canvas.height - v * 40;
-      if (y < 0) y = 0;
-      if (i === 0) ctx.moveTo(x, y);
+    const visibleSamples = speed === 25 ? 75 : speed === 50 ? 150 : 300;
+    const samples = buffer.current.slice(-visibleSamples);
+    samples.forEach((value, index) => {
+      const x = (index * canvas.width) / Math.max(samples.length - 1, 1);
+      const y = Math.max(0, Math.min(canvas.height, canvas.height / 2 - (value * 24) / scale));
+      if (index === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#d64b4b';
+    ctx.lineWidth = 2.2;
     ctx.stroke();
   };
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const data = customEvent.detail;
-      if (!data) return;
+      const data = (event as CustomEvent).detail;
+      const rawSample = Number(data?.ecg);
+      if (!Number.isFinite(rawSample)) return;
 
-      const ecg = Math.max(0, (data.ecg - 2048) / 100);
-      buffer.current.push(ecg);
+      const sample = (rawSample - 2048) / 100;
+      setVoltage(sample);
+      buffer.current.push(sample);
       buffer.current.shift();
       draw();
-
-      // Distribute samples to all three leads
-      // // if (isRecording) {
-      // //   const leadIndex = leadCounterRef.current % 3;
-      // //   if (leadIndex === 0) {
-      //     addEcgSample('lead1', ecg);
-      //   } else if (leadIndex === 1) {
-          addEcgSample('lead2', ecg);
-        // } else {
-        //   addEcgSample('lead3', ecg);
-        // }
-        // leadCounterRef.current++;
-      // }
+      addEcgSample('lead2', sample);
     };
 
     window.addEventListener('esp-data', handler);
     return () => window.removeEventListener('esp-data', handler);
-  }, [isRecording, addEcgSample]);
+  }, [addEcgSample]);
 
-  const getRecordingStatus = () => {
-    if (!isRecording) return null;
-    return `Recording: ${recordingDuration.toFixed(1)}s / 10.0s`;
-  };
+  useEffect(() => {
+    draw();
+  }, [speed, scale]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <LineChart className="w-6 h-6" />
-          ECG Real-time
+    <Card className="overflow-hidden rounded-2xl border-0 shadow-md">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base sm:text-lg">
+          <LineChart className="h-5 w-5 text-primary" />
+          ECG Lead II — {speed} mm/s | {scale.toFixed(1)} mm/mV | 250 Hz
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="space-y-4">
-        <div className="text-sm text-muted-foreground">25mm/sec 10mm/mV</div>
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={200}
-          className="w-full border rounded mt-4"
-        />
-        <div className="flex items-center justify-between">
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-slate-50 p-2 text-xs">
           <div className="flex items-center gap-2">
-            {isRecording && <Circle className="w-4 h-4 fill-red-500 text-red-500 animate-pulse" />}
-            {getRecordingStatus() && (
-              <span className="text-sm font-semibold text-red-600">{getRecordingStatus()}</span>
-            )}
+            <span className="text-muted-foreground">Sweep speed</span>
+            {[25, 50, 100].map((value) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={speed === value ? 'default' : 'outline'}
+                className="h-7 px-2"
+                onClick={() => setSpeed(value)}
+              >
+                {value} mm/s
+              </Button>
+            ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
+            <span className="mr-1 text-muted-foreground">Gain</span>
             <Button
-              onClick={startRecording}
-              disabled={isRecording}
-              variant={isRecording ? 'outline' : 'default'}
-              className="gap-2"
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0"
+              aria-label="Decrease ECG gain"
+              onClick={() => setScale((value) => Math.max(0.5, value - 0.2))}
             >
-              <Circle className="w-4 h-4" />
-              Record (10s)
+              −
             </Button>
+            <span className="min-w-16 text-center">{scale.toFixed(1)} mm/mV</span>
             <Button
-              onClick={stopRecording}
-              disabled={!isRecording}
-              variant="destructive"
-              className="gap-2"
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 w-7 p-0"
+              aria-label="Increase ECG gain"
+              onClick={() => setScale((value) => Math.min(3, value + 0.2))}
             >
-              <Square className="w-4 h-4" />
-              Stop
+              +
             </Button>
           </div>
         </div>
 
-        {/* Show ECG classification result */}
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-muted-foreground">Latest ECG</span>
+          <span className="font-semibold text-primary">
+            {voltage === null ? '--' : `${voltage.toFixed(3)} mV`}
+          </span>
+        </div>
+        <canvas
+          ref={canvasRef}
+          width={900}
+          height={145}
+          className="ecg-grid w-full rounded-md"
+          aria-label="Live ECG waveform"
+        />
+
         {ecgClassification && (
-          <div className="mt-4 p-4 border rounded bg-muted/50">
-            <h3 className="font-semibold mb-2">ECG Classification</h3>
+          <div className="rounded-lg border bg-muted/50 p-3 text-sm">
+            <h3 className="mb-2 font-semibold">ECG Classification</h3>
             <p>
               <span className="font-medium">Prediction:</span>{' '}
               {ecgClassification.overall_prediction}
@@ -131,7 +133,7 @@ export function EcgSensorCard() {
               <summary className="cursor-pointer text-sm text-muted-foreground">
                 Probabilities
               </summary>
-              <pre className="text-xs mt-1">
+              <pre className="mt-1 text-xs">
                 {JSON.stringify(ecgClassification.average_probabilities, null, 2)}
               </pre>
             </details>

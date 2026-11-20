@@ -1,11 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Stethoscope, Heart, Waves, VolumeX, RefreshCw, Download, BrainCircuit, Thermometer } from 'lucide-react';
+import { Stethoscope, Heart, RefreshCw, Download, BrainCircuit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { useMurmurRecording } from '@/context/murmur-context';
 import { usePPGCapture } from '@/context/ppg-context';
@@ -25,11 +24,12 @@ export function StethoscopeSensorCard() {
   const vitals = useVitals();
   const { toast } = useToast();
 
-  const { bpm, spo2, temp, setBpm, setSpo2, setTemp } = vitals;
+  const { setBpm, setSpo2, setTemp } = vitals;
   const [progress, setProgress] = useState(0);
   const [showPrediction, setShowPrediction] = useState(false);
   // A local copy of captured samples used only for WAV export
   const localSamplesRef = useRef<number[]>([]);
+  const wasRecordingRef = useRef(false);
 
   const waveCanvasRef = useRef<HTMLCanvasElement | null>(null);
   // Ring buffer for waveform display — never triggers re-renders
@@ -53,12 +53,20 @@ export function StethoscopeSensorCard() {
   }, [murmurContext.isRecording]);
 
   useEffect(() => {
+    if (murmurContext.isRecording && !wasRecordingRef.current) {
+      localSamplesRef.current = [];
+      setShowPrediction(false);
+    }
+    wasRecordingRef.current = murmurContext.isRecording;
+  }, [murmurContext.isRecording]);
+
+  useEffect(() => {
     addPPGSampleRef.current = ppgContext.addPPGSample;
   }, [ppgContext.addPPGSample]);
 
   // ── Progress bar driven by recordingDuration from context ──
   useEffect(() => {
-    setProgress((murmurContext.recordingDuration / 10) * 100);
+    setProgress((murmurContext.recordingDuration / 30) * 100);
   }, [murmurContext.recordingDuration]);
 
   // Reset progress when not recording
@@ -159,7 +167,7 @@ export function StethoscopeSensorCard() {
     
     console.log('===== [DOWNLOAD WAV] =====');
     console.log('Sample count:', samples.length);
-    console.log('Expected: 40,000 (4000 Hz × 10 sec)');
+    console.log('Expected: 120,000 (4000 Hz × 30 sec)');
     console.log('Actual duration:', (samples.length / 4000).toFixed(2), 'seconds');
     console.log('First 5 samples:', samples.slice(0, 5));
     console.log('Last 5 samples:', samples.slice(-5));
@@ -194,30 +202,6 @@ export function StethoscopeSensorCard() {
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
-  // ── Controls ──
-  const startRecording = () => {
-    localSamplesRef.current = [];
-    setShowPrediction(false);
-    console.log('[Stethoscope] startRecording() called - clearing local buffer');
-    murmurContext.startRecording();
-    ppgContext.startPPGCapture();
-    console.log('[Stethoscope] murmurContext.startRecording() and ppgContext.startPPGCapture() called');
-    toast({ title: 'Recording Started', description: 'Recording for 10 seconds…' });
-  };
-
-  const stopRecording = () => {
-    console.log('[Stethoscope] stopRecording() called');
-    console.log('[Stethoscope] Samples in local buffer:', localSamplesRef.current.length);
-    murmurContext.stopRecording();
-    ppgContext.stopPPGCapture();
-    toast({ title: 'Recording Stopped', description: 'Murmur and PPG recordings loaded. Ready to submit.' });
-  };
-
-  const toggleRecord = () => {
-    if (murmurContext.isRecording) stopRecording();
-    else startRecording();
-  };
-
   const handleRestart = () => {
     murmurContext.clearRecording();
     ppgContext.clearPPGCapture();
@@ -237,51 +221,27 @@ export function StethoscopeSensorCard() {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
           <Stethoscope className="w-6 h-6" />
-          Stethoscope (Phonocardiogram)
+          PCG / Stethoscope (500 Hz)
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Left: Waveform */}
+      <CardContent className="space-y-3">
         <div className="space-y-2">
-          <h3 className="font-semibold text-center text-muted-foreground">Real-time PCG Waveform</h3>
           <canvas
             ref={waveCanvasRef}
             width={800}
-            height={340}
-            className="w-full border rounded-lg bg-gray-50"
+            height={145}
+            className="ecg-grid w-full rounded-md"
+            aria-label="Live phonocardiogram waveform"
           />
         </div>
 
-        {/* Right: Controls */}
-        <div className="space-y-4 flex flex-col justify-between">
-          <div className="flex justify-around items-center gap-4 text-sm text-muted-foreground p-2 rounded-lg bg-slate-50">
-            <div className="flex items-center gap-2">
-              <Heart className="w-5 h-5 text-red-500" />
-              <span>{bpm ?? '--'} BPM</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Waves className="w-5 h-5 text-blue-500" />
-              <span>{spo2 ?? '--'} % SpO₂</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Thermometer className="w-5 h-5 text-orange-500" />
-              <span>{temp ?? '--'} °C</span>
-            </div>
-          </div>
-
-          <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800">
-            <div className="flex items-center">
-              <VolumeX className="h-5 w-5 mr-2" />
-              <AlertDescription>NO TALKING: Quiet patient for accurate results.</AlertDescription>
-            </div>
-          </Alert>
-
+        <div className="flex flex-wrap items-center justify-between gap-3">
           {showPrediction && (
-            <Card className="bg-blue-50 border-blue-200">
+            <Card className="w-full border-blue-200 bg-blue-50">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
                   <BrainCircuit className="w-5 h-5 text-blue-700" />
@@ -304,26 +264,24 @@ export function StethoscopeSensorCard() {
             </Card>
           )}
 
-          <div className="space-y-2 pt-2">
-            <div className="text-center">
-              <p className="text-sm font-medium">
-                {murmurContext.isRecording
-                  ? `Recording… ${murmurContext.recordingDuration.toFixed(1)}s / 10s`
-                  : 'Ready to Record'}
-              </p>
-              <Progress value={progress} className="h-2 mt-1" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                className="flex-1"
-                onClick={toggleRecord}
-                variant={murmurContext.isRecording ? 'destructive' : 'default'}
-              >
-                {murmurContext.isRecording ? 'Stop Recording' : 'Record (10s)'}
-              </Button>
-              <Button variant="secondary" size="icon" onClick={handleRestart}><RefreshCw className="w-4 h-4" /></Button>
-              <Button variant="secondary" size="icon" onClick={handleAnalyze}><Download className="w-4 h-4" /></Button>
-            </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Heart className="h-4 w-4 text-primary" />
+            <span>
+              {murmurContext.isRecording
+                ? `Recording… ${murmurContext.recordingDuration.toFixed(1)}s`
+                : murmurContext.recording ? 'Recording complete' : 'Waiting for recording'}
+            </span>
+            <Progress value={progress} className="h-2 w-24" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleRestart} disabled={murmurContext.isRecording}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Clear
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleAnalyze} disabled={murmurContext.isRecording}>
+              <Download className="mr-2 h-4 w-4" />
+              Export audio
+            </Button>
           </div>
         </div>
       </CardContent>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Send } from 'lucide-react';
 
@@ -57,15 +57,14 @@ export default function ClickToTwoPage() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Proceed to Data Entry</CardTitle>
-        <CardDescription>When you have finished collecting sensor data, click the button below to proceed to the patient data entry form. The latest sensor readings will be sent automatically.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button onClick={handleSendData} className="w-full text-lg">
-          <Send className="mr-2 h-5 w-5" />
-          Send Data and Open Form
+    <Card className="rounded-xl border-0 shadow-sm">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
+        <p className="text-sm text-muted-foreground">
+          Continue to patient details with the latest readings.
+        </p>
+        <Button onClick={handleSendData} variant="outline" size="sm">
+          <Send className="mr-2 h-4 w-4" />
+          Open data entry
         </Button>
       </CardContent>
     </Card>

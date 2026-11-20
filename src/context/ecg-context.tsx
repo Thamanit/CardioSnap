@@ -53,7 +53,7 @@ export function EcgProvider({ children }: { children: React.ReactNode }) {
     async () => {}
   );
 
-  const RECORDING_DURATION = 10;
+  const RECORDING_DURATION = 30;
 
   const flushPending = useCallback(() => {
     const pending = pendingRef.current;

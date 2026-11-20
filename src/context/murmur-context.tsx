@@ -20,9 +20,9 @@ interface MurmurContextType {
 const MurmurContext = createContext<MurmurContextType | undefined>(undefined);
 
 // Constants outside component to prevent recalculation
-const RECORDING_DURATION = 10; // seconds
+const RECORDING_DURATION = 30; // seconds
 const SAMPLE_RATE = 4000;
-const MAX_SAMPLES = SAMPLE_RATE * RECORDING_DURATION; // 40,000
+const MAX_SAMPLES = SAMPLE_RATE * RECORDING_DURATION;
 
 export function MurmurProvider({ children }: { children: React.ReactNode }) {
   const [recording, setRecording] = useState<MurmurRecording | null>(null);
@@ -78,8 +78,8 @@ export function MurmurProvider({ children }: { children: React.ReactNode }) {
     
     console.log('===== [MURMUR RECORDING START] =====');
     console.log('Start time:', new Date().toISOString());
-    console.log('Expected duration: 10 seconds');
-    console.log('Expected sample count: 40,000 (4000Hz × 10s)');
+    console.log(`Expected duration: ${RECORDING_DURATION} seconds`);
+    console.log(`Expected sample count: ${MAX_SAMPLES} (4000Hz × ${RECORDING_DURATION}s)`);
     console.log('isRecordingRef.current:', isRecordingRef.current);
 
     // Progress ticker — updates UI every 100 ms

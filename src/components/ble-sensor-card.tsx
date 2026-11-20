@@ -2,24 +2,31 @@
 
 import { useState, useEffect } from 'react';
 import { Bluetooth, BluetoothConnected, BluetoothSearching, WifiOff, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 import { useToast } from '@/hooks/use-toast';
+
+interface BleSensorCardProps {
+  onConnectionChange?: (connected: boolean) => void;
+}
 
 // IMPORTANT: Replace these with the actual UUIDs from your ESP32 firmware.
 const SERVICE_UUID = '4fafc201-1fb5-459e-8fcc-c5c9c331914b'; // Example custom service UUID
 const CHARACTERISTIC_UUID = 'beb5483e-36e1-4688-b7f5-ea07361b26a8'; // Example custom characteristic UUID
 
-export function BleSensorCard() {
+export function BleSensorCard({ onConnectionChange }: BleSensorCardProps) {
   const [device, setDevice] = useState<any>(null);
   const [server, setServer] = useState<any>(null);
-  const [sensorValue, setSensorValue] = useState<string>('--');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const isConnected = server?.connected;
+
+  useEffect(() => {
+    onConnectionChange?.(Boolean(isConnected));
+  }, [isConnected, onConnectionChange]);
 
   const handleConnect = async () => {
     setIsLoading(true);
@@ -100,7 +107,6 @@ export function BleSensorCard() {
     });
     setDevice(null);
     setServer(null);
-    setSensorValue('--');
   };
 
   const handleCharacteristicValueChanged = (event: any) => {
@@ -113,8 +119,6 @@ export function BleSensorCard() {
     // Example for a single byte (uint8): value.getUint8(0)
     // Example for a 4-byte float: value.getFloat32(0, /*little-endian*/ true)
     const decodedValue = new TextDecoder('utf-8').decode(value);
-
-    setSensorValue(decodedValue)
 
     try {
       const data = JSON.parse(decodedValue)
@@ -141,17 +145,8 @@ export function BleSensorCard() {
 
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Bluetooth className="w-6 h-6" />
-          ESP32 BLE Sensor
-        </CardTitle>
-        <CardDescription>
-          Connect to your ESP32 device to read sensor data in real-time via Bluetooth.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <Card className="rounded-2xl border-0 shadow-md">
+      <CardContent className="space-y-3 p-4">
         {error && (
           <Alert variant="destructive">
             <WifiOff className="h-4 w-4" />
@@ -159,46 +154,31 @@ export function BleSensorCard() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <div className="flex items-center justify-between p-4 border rounded-lg bg-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             {isConnected ? <BluetoothConnected className="text-blue-500" /> : <BluetoothSearching />}
             <span className="text-sm font-medium text-muted-foreground">
-              Status: {isLoading ? "Connecting..." : isConnected ? "Connected" : "Disconnected"}
+              {isLoading ? "Connecting..." : isConnected ? "BLE connected" : "BLE disconnected"}
             </span>
           </div>
-          {device && <span className="text-sm font-semibold">{device.name || device.id}</span>}
+          {device && <span className="text-sm text-muted-foreground">{device.name || device.id}</span>}
+          {isConnected ? (
+            <Button onClick={handleDisconnect} variant="outline" className="ml-auto">
+              <WifiOff className="mr-2 h-4 w-4" />
+              Disconnect
+            </Button>
+          ) : (
+            <Button onClick={handleConnect} disabled={isLoading} className="ml-auto">
+              {isLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Bluetooth className="mr-2 h-4 w-4" />
+              )}
+              {isLoading ? "Connecting..." : "Connect BLE"}
+            </Button>
+          )}
         </div>
 
-        <Card className="text-center">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium text-muted-foreground">Raw Sensor Value</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold tracking-tighter h-8 overflow-hidden text-ellipsis">{sensorValue}</p>
-          </CardContent>
-        </Card>
-
-        {isConnected ? (
-          <Button onClick={handleDisconnect} variant="destructive" className="w-full">
-            <WifiOff className="mr-2 h-4 w-4" />
-            Disconnect
-          </Button>
-        ) : (
-          <Button onClick={handleConnect} disabled={isLoading} className="w-full">
-            {isLoading ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Bluetooth className="mr-2 h-4 w-4" />
-            )}
-            {isLoading ? "Connecting..." : "Connect to ESP32"}
-          </Button>
-        )}
-        <Alert>
-          <AlertTitle>Configuration Note</AlertTitle>
-          <AlertDescription className="text-xs">
-            Make sure your ESP32 is advertising the service with UUID: <code className="font-mono bg-gray-200 p-1 rounded">{SERVICE_UUID}</code>
-          </AlertDescription>
-        </Alert>
       </CardContent>
     </Card>
   );

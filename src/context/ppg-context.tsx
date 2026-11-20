@@ -45,7 +45,8 @@ function encodeWav(samples: number[], sampleRate: number): Blob {
 }
 
 const SAMPLE_RATE = 100; // PPG typically sampled at lower rate than audio
-const MAX_SAMPLES = SAMPLE_RATE * 10; // 10 seconds of capture
+const CAPTURE_DURATION = 30;
+const MAX_SAMPLES = SAMPLE_RATE * CAPTURE_DURATION;
 
 export function PPGProvider({ children }: { children: React.ReactNode }) {
   const [ppgWavBlob, setPpgWavBlob] = useState<File | null>(null);
@@ -65,8 +66,8 @@ export function PPGProvider({ children }: { children: React.ReactNode }) {
     
     console.log('===== [PPG CAPTURE STOPPED] =====');
     console.log('Captured samples:', samples.length);
-    console.log('Expected samples:', SAMPLE_RATE * 10);
-    console.log('Sample rate:', (samples.length / 10).toFixed(0), 'Hz');
+    console.log('Expected samples:', SAMPLE_RATE * CAPTURE_DURATION);
+    console.log('Sample rate:', (samples.length / CAPTURE_DURATION).toFixed(0), 'Hz');
 
     if (samples.length > 0) {
       const wavBlob = encodeWav(samples, SAMPLE_RATE);
